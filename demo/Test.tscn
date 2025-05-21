@@ -1,8 +1,17 @@
-[gd_scene load_steps=2 format=3 uid="uid://cs6xj3i70yh0f"]
+[gd_scene load_steps=3 format=3 uid="uid://cs6xj3i70yh0f"]
 
 [ext_resource type="Script" uid="uid://ba0phkf16vg6l" path="res://hello_world_gdextention_function.gd" id="1_myinc"]
+[ext_resource type="MeshLibrary" uid="uid://cwusqwtpjkoaa" path="res://TerrainTiles/3D_Terrain_Tiles.tres" id="2_njov2"]
 
 [node name="Test" type="Node3D"]
 
 [node name="HelloWorld" type="HelloWorld" parent="."]
 script = ExtResource("1_myinc")
+
+[node name="GridMap" type="GridMap" parent="."]
+mesh_library = ExtResource("2_njov2")
+cell_size = Vector3(1, 0.25, 1)
+data = {
+"cells": PackedInt32Array(65535, 2, 1, 65535, 3, 0, 0, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 1, 1, 2, 0, 3, 1048577, 2, 0, 1441796, 3, 1, 1441794, 3, 0, 1441794, 1, 0, 1441794, 3, 2, 655362, 65540, 2, 1, 65540, 3, 1, 65540, 65535, 1, 65541, 65535, 2, 65541, 0, 2, 65541, 1, 2, 65541, 2, 2, 65541, 3, 2, 65540, 1, 5, 65540, 0, 5, 3, 3, 2, 2, 3, 2, 1, 3, 2, 3, 65535, 2, 3, 4, 2, 65540, 4, 0, 65541, 4, 1048577, 65542, 4, 1048577, 65543, 4, 1048577, 65544, 4, 1048577, 2, 4, 1048578, 2, 5, 1048578, 3, 5, 1048578, 4, 5, 1048578, 5, 5, 1048578, 6, 5, 1048578, 7, 5, 1048578, 8, 5, 1048578, 9, 5, 1048578, 65542, 65535, 1048578, 65542, 0, 1048578, 65542, 1, 1048578, 65542, 2, 1048578, 65542, 3, 1048578, 65543, 3, 1048578, 65544, 3, 1048578, 65544, 2, 1048578, 65544, 1, 1048578, 65544, 0, 1048578, 65544, 65535, 1048578, 65543, 65535, 1048578, 65543, 0, 1048578, 65543, 1, 1048578, 65543, 2, 1048578)
+}
+metadata/_editor_floor_ = Vector3(0, 1, 0)

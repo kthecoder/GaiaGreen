@@ -40,7 +40,7 @@ env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 
 env.Append(CPPPATH=["src/"])
 # TODO Add Nested Folders as a new Glob
-sources = [Glob("src/*.cpp"), Glob("src/Example/*.cpp")]
+sources = [Glob("src/*.cpp"), Glob("src/TerrainGen/*.cpp")]
 
 if env["target"] in ["editor", "template_debug"]:
     try:

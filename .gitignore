@@ -52,7 +52,11 @@ compile_commands.json
 # VSCode
 .vscode/*
 !.vscode/extensions.json
+!.vscode/c_cpp_properties.json
 .DS_Store
 
 # Jetbrains
 .idea/
+
+#Assets
+/demo/TerrainTiles/*
