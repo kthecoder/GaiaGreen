@@ -15,6 +15,17 @@ class TerrainGen : public Node {
 	GDCLASS(TerrainGen, Node);
 
 protected:
+	enum TileType {
+		WATER, // Pure water tile, Connects to bottom of Water Edge tiles and other Water tiles
+		WATER_CORNER, // Water corner with a section of ground at the top height, Connects to corners of water on one side and ground on the other
+		WATER_EDGE, // Water with a section of ground at the top height, Connects to water and ground on opposite sides
+		GROUND, // Pure ground tile, Simple tile that connects to ground, top of ramp, and top of cliffs
+		RAMP, // Ground to Ground tile of 45 degree angle, Connects ground tiles for elevation changes
+		RAMP_CORNER, // Connector of ramps and cliffs on its corners, Connects to Ground tiles and can be next to cliffs
+		CLIFF, // Cliffs separate elevation and on its sides can connect to cliffs & ramps, Connects to ground tiles & Water Edge for elevation changes
+		CLIFF_CORNER // Connector of ramps and cliffs on its corners, Connects to Ground & Water edge tiles, can also be next to Ramps
+	};
+
 	Ref<FastNoiseLite> noise;
 
 	static void _bind_methods();
@@ -25,7 +36,7 @@ public:
 
 	//Generate Terrain
 	//Takes in a height & width for size of map on the X & Z axis
-	void generate(GridMap *myGridMap, int height, int width, int depth, int seed, int noiseOctaves = 2, float noiseFreq = 0.005);
+	void generate(GridMap *myGridMap, int height, int width, int depth, int seed, bool useFractal = false, int noiseOctaves = 2, float noiseFreq = 0.005);
 };
 
 #endif
