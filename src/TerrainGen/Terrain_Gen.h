@@ -2,6 +2,7 @@
 #define HELLOWORLD_H
 
 #include <godot_cpp/classes/fast_noise_lite.hpp>
+#include <godot_cpp/classes/grid_map.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
@@ -16,8 +17,6 @@ class TerrainGen : public Node {
 protected:
 	Ref<FastNoiseLite> noise;
 
-	float get_noise_value(float x, float y, float z);
-
 	static void _bind_methods();
 
 public:
@@ -26,7 +25,7 @@ public:
 
 	//Generate Terrain
 	//Takes in a height & width for size of map on the X & Z axis
-	Array generate(int height, int width, int noiseOctaves = 2, float noiseFreq = 0.005);
+	void generate(GridMap *myGridMap, int height, int width, int depth, int seed, int noiseOctaves = 2, float noiseFreq = 0.005);
 };
 
 #endif
