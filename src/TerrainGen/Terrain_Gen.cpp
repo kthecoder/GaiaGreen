@@ -45,8 +45,7 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
-			float n = noise->get_noise_2d((float)x, (float)y);
-			heightMap[y][x] = round(((n + 1.0f) / 2.0f) * (depth - 1));
+			heightMap[y][x] = noise->get_noise_2d((float)x, (float)y) / 2.0f * 0.5f;
 		}
 	}
 
@@ -75,7 +74,7 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			}
 			// Water assignment
 			if (elevation == 1 && !isEdge) {
-				myGridMap->set_cell_item(Vector3i(x, y, elevation), WATER, 0);
+				myGridMap->set_cell_item(Vector3i(x, elevation, y), WATER, 0);
 				continue;
 			}
 
