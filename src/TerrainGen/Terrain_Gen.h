@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <algorithm>
 #include <vector>
 
 using namespace godot;
@@ -36,7 +37,7 @@ public:
 
 	//Generate Terrain
 	//Takes in a height & width for size of map on the X & Z axis
-	void generate(GridMap *myGridMap, int height, int width, int depth, int seed, bool useFractal = false, int noiseOctaves = 2, float noiseFreq = 0.005);
+	void generate(GridMap *myGridMap, int height, int width, int depth, int seed, int noiseType, int noiseOctaves = 2, float jitter = 0.0, float noiseFreq = 0.005);
 };
 
 #endif
