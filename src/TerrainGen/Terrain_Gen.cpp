@@ -10,8 +10,6 @@ TerrainGen::~TerrainGen() {
 }
 
 void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, int seed, int noiseType, int noiseOctaves, float jitter, float noiseFreq) {
-	UtilityFunctions::print("Begin Terrain Generation!");
-
 	/*****************************************************
 
 		Setup the Noise Function
@@ -36,11 +34,11 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 	vector<vector<vector<int>>> gridMap(
 			depth, vector<vector<int>>(width, vector<int>(height, 0)));
 
-	// Noise Map may be used later, not sure yet
-	// vector<vector<float>> noiseMap(width, vector<float>(height, 0.0f));
-
 	vector<vector<int>> elevationMap(width, vector<int>(height, 0));
 	vector<vector<int>> elevationMapSmooth(width, vector<int>(height, 0));
+
+	int dx[4] = { 1, -1, 0, 0 };
+	int dy[4] = { 0, 0, 1, -1 };
 
 	/*****************************************************
 
@@ -48,11 +46,14 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 
 	*****************************************************/
 
+	// Generate the Elevation Map
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
 			float currentNoise = noise->get_noise_2d((float)x, (float)y);
-			// noiseMap[x][y] = currentNoise;
-			elevationMap[x][y] = round(((currentNoise + 1.0f) / 2.0f) * depth);
+
+			float bias = 0.1, stepSize = 4;
+			int rawNoise = round(pow(((currentNoise + 1.0f) / 2.0f) + bias, 1.5) * depth);
+			elevationMap[x][y] = round(rawNoise / stepSize) * stepSize;
 		}
 	}
 
@@ -85,9 +86,34 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 
 	/*****************************************************
 
-		Tile Placement
+			Elevation Spacing
+
+				The elevation map generates elevation changes to close together
+				create a buffer that smooths out double edges
 
 	*****************************************************/
+
+	for (int x = 1; x < width - 1; x++) {
+		for (int y = 1; y < height - 1; y++) {
+			int elevation = elevationMap[x][y];
+
+			bool hasElevationChange = false;
+			for (int d = 0; d < 4; ++d) {
+				int nx = x + dx[d];
+				int ny = y + dy[d];
+
+				if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
+					if (abs(elevationMap[nx][ny] - elevation) > 1) {
+						hasElevationChange = true;
+					}
+				}
+			}
+
+			if (hasElevationChange) {
+				elevationMap[x][y] = elevationMap[x - 1][y]; // Force buffer using prior elevation
+			}
+		}
+	}
 
 	for (int x = 0; x < width; ++x) {
 		for (int y = 0; y < height; ++y) {
@@ -116,8 +142,6 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 				*****************************************************/
 
 				int neighborElevations[4] = { elevation, elevation, elevation, elevation };
-				int dx[4] = { 1, -1, 0, 0 };
-				int dy[4] = { 0, 0, 1, -1 };
 
 				for (int d = 0; d < 4; ++d) {
 					int nx = x + dx[d];
@@ -128,7 +152,6 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 					}
 				}
 
-				// Elevation analysis
 				TileType tileType = GROUND;
 				int rotationOrientation = 0;
 				bool needsRamp = false, needsCliff = false, needsCorner = false;
@@ -150,7 +173,6 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 					}
 				}
 
-				// Assign terrain type
 				if (numDirectionChanges == 0) {
 					tileType = GROUND;
 				} else if (needsCliff) {
@@ -159,7 +181,6 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 					tileType = RAMP;
 				}
 
-				// Corner detection: Two direction elevation change
 				if (numDirectionChanges >= 2) {
 					needsCorner = true;
 					if (tileType == RAMP)
@@ -168,7 +189,6 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 						tileType = CLIFF_CORNER;
 				}
 
-				// Water Edge & Corner detection
 				if (tileType == WATER) {
 					if (numDirectionChanges == 1) {
 						tileType = WATER_EDGE;
@@ -177,40 +197,58 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 					}
 				}
 
-				// Assign rotation using **0, 90, 180, 270** only
 				if (tileType == RAMP || tileType == CLIFF || tileType == RAMP_CORNER || tileType == CLIFF_CORNER) {
-					if (!needsCorner) {
-						switch (dominantDirection) {
-							case 0:
-								rotationOrientation = 0; // No Rotation
-								break; // North
-							case 1:
-								rotationOrientation = 1; // 90 Degrees Clockwise
-								break; // East
-							case 2:
-								rotationOrientation = 2; // 180 Degrees Clockwise
-								break; // South
-							case 3:
-								rotationOrientation = 3; // 270 Degrees Clockwise
-								break; // West
+					int highestNeighborIndex = -1;
+					int highestNeighborElevation = elevation;
+					int secondaryNeighborIndex = -1;
+
+					for (int d = 0; d < 4; ++d) {
+						if (neighborElevations[d] > highestNeighborElevation) {
+							secondaryNeighborIndex = highestNeighborIndex;
+							highestNeighborElevation = neighborElevations[d];
+							highestNeighborIndex = d;
 						}
-					} else {
-						// Corner cases use the same **0, 90, 180, 270** logic.
-						if (neighborElevations[0] != elevation && neighborElevations[2] != elevation) {
-							rotationOrientation = 1; // Vertical corner (North-South elevation change)
-						} else if (neighborElevations[1] != elevation && neighborElevations[3] != elevation) {
-							rotationOrientation = 2; // Horizontal corner (East-West elevation change)
-						} else if (neighborElevations[0] != elevation && neighborElevations[1] != elevation) {
-							rotationOrientation = 0; // Corner facing North-East
-						} else if (neighborElevations[2] != elevation && neighborElevations[3] != elevation) {
-							rotationOrientation = 3; // Corner facing South-West
+					}
+
+					bool isCorner = (secondaryNeighborIndex != -1 && abs(neighborElevations[secondaryNeighborIndex] - elevation) > 0);
+
+					if (highestNeighborIndex != -1) {
+						if (!isCorner) {
+							switch (highestNeighborIndex) {
+								case 0:
+									rotationOrientation = 2;
+									break; // North
+								case 1:
+									rotationOrientation = 3;
+									break; // East
+								case 2:
+									rotationOrientation = 0;
+									break; // South
+								case 3:
+									rotationOrientation = 1;
+									break; // West
+							}
+						} else {
+							if ((highestNeighborIndex == 0 && secondaryNeighborIndex == 1) ||
+									(highestNeighborIndex == 1 && secondaryNeighborIndex == 0)) {
+								rotationOrientation = 0;
+							} else if ((highestNeighborIndex == 2 && secondaryNeighborIndex == 3) ||
+									(highestNeighborIndex == 3 && secondaryNeighborIndex == 2)) {
+								rotationOrientation = 3;
+							} else if ((highestNeighborIndex == 0 && secondaryNeighborIndex == 3) ||
+									(highestNeighborIndex == 3 && secondaryNeighborIndex == 0)) {
+								rotationOrientation = 1;
+							} else if ((highestNeighborIndex == 1 && secondaryNeighborIndex == 2) ||
+									(highestNeighborIndex == 2 && secondaryNeighborIndex == 1)) {
+								rotationOrientation = 2;
+							}
 						}
 					}
 				}
 
 				/*****************************************************
 
-					Grid Cell Setter
+					Grid Map Cell Setter
 
 				*****************************************************/
 
