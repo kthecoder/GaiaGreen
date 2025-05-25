@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <vector>
 
+#include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/image_texture.hpp>
+#include <godot_cpp/classes/texture_rect.hpp>
+#include <godot_cpp/core/class_db.hpp>
+
 using namespace godot;
 using namespace std;
 

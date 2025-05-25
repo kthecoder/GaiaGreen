@@ -35,7 +35,11 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			depth, vector<vector<int>>(width, vector<int>(height, 0)));
 
 	vector<vector<int>> elevationMap(width, vector<int>(height, 0));
-	vector<vector<int>> elevationMapSmooth(width, vector<int>(height, 0));
+
+	int blockSize = 4;
+	int reducedX = floor(width / blockSize);
+	int reducedY = floor(height / blockSize);
+	vector<vector<int>> lowResMap(reducedX, vector<int>(reducedY, 0));
 
 	int dx[4] = { 1, -1, 0, 0 };
 	int dy[4] = { 0, 0, 1, -1 };
@@ -57,61 +61,29 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 		}
 	}
 
-	// Apply a Median Filter
-	for (int x = 0; x < width; x++) {
-		for (int y = 0; y < height; y++) {
-			vector<int> neighbors;
+	// Downsample by sampling one pixel per block.
+	for (int x = 0; x < reducedX; x++) {
+		for (int y = 0; y < reducedY; y++) {
+			int sampleX = x * blockSize;
+			int sampleY = y * blockSize;
 
-			for (int dx = -1; dx <= 1; dx++) {
-				for (int dy = -1; dy <= 1; dy++) {
-					int nx = x + dx;
-					int ny = y + dy;
-
-					// Ensure indices are valid before adding to the list
-					if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-						neighbors.push_back(elevationMap[nx][ny]);
-					}
-				}
-			}
-
-			if (!neighbors.empty()) {
-				sort(neighbors.begin(), neighbors.end());
-				elevationMapSmooth[x][y] = max(0, static_cast<int>(neighbors[neighbors.size() / 2]));
-			}
+			lowResMap[y][x] = (elevationMap[x][y] + 1.0f) / 2.0f;
 		}
 	}
 
-	// Apply the smoothed elevation map
-	elevationMap = elevationMapSmooth;
+	//Posterize
+	for (int x = 0; x < reducedX; x++) {
+		for (int y = 0; y < reducedY; y++) {
+			int quantizedLevel = min(depth - 1, static_cast<int>(lowResMap[x][y] * depth));
+			lowResMap[x][x] = quantizedLevel / static_cast<float>(depth - 1);
+		}
+	}
 
-	/*****************************************************
-
-			Elevation Spacing
-
-				The elevation map generates elevation changes to close together
-				create a buffer that smooths out double edges
-
-	*****************************************************/
-
-	for (int x = 1; x < width - 1; x++) {
-		for (int y = 1; y < height - 1; y++) {
-			int elevation = elevationMap[x][y];
-
-			bool hasElevationChange = false;
-			for (int d = 0; d < 4; ++d) {
-				int nx = x + dx[d];
-				int ny = y + dy[d];
-
-				if (nx >= 0 && ny >= 0 && nx < width && ny < height) {
-					if (abs(elevationMap[nx][ny] - elevation) > 1) {
-						hasElevationChange = true;
-					}
-				}
-			}
-
-			if (hasElevationChange) {
-				elevationMap[x][y] = elevationMap[x - 1][y]; // Force buffer using prior elevation
-			}
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			int srcX = x / blockSize;
+			int srcY = y / blockSize;
+			elevationMap[x][y] = lowResMap[srcX][srcY];
 		}
 	}
 
