@@ -16,7 +16,7 @@ func _ready():
 	grid_map.cell_size = Vector3(1, 0.25, 1);
 
 	# Value Noise Based
-	#generate(grid_map, 128, 128, 4, seed_value, NoiseType.VALUE, 2, 0.79, 0.1);
+	#generate(grid_map, 128, 128, 4, seed_value, NoiseType.VALUE, 0.79, 0.1);
 
 	# Simplex Noise Based
-	generate(grid_map, 128, 128, 4, seed_value, NoiseType.SIMPLEX, 2, 0.79, 0.12);
+	generate(grid_map, 128, 128, 4, seed_value, NoiseType.SIMPLEX, 0.3, 0.02);
