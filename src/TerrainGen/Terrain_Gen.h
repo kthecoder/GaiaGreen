@@ -1,5 +1,5 @@
-#ifndef HELLOWORLD_H
-#define HELLOWORLD_H
+#ifndef TERRAIN_GEN_H
+#define TERRAIN_GEN_H
 
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/grid_map.hpp>
@@ -35,6 +35,9 @@ protected:
 	Ref<FastNoiseLite> noise;
 
 	static void _bind_methods();
+
+private:
+	TileType isCornerTile(int x, int y, vector<vector<TileType>> &tileMap);
 
 public:
 	TerrainGen();
