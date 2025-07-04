@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3 uid="uid://mdu1weeywxyp"]
+
+[ext_resource type="PackedScene" uid="uid://cbuhaohoygmen" path="res://TerrainTiles/Water_Edge_East.glb" id="1_v3wln"]
+
+[node name="Water_Edge_East" instance=ExtResource("1_v3wln")]

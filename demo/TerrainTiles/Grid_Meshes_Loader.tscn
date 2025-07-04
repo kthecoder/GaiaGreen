@@ -1,0 +1,28 @@
+[gd_scene load_steps=9 format=3 uid="uid://dwe0j28or0dmv"]
+
+[ext_resource type="PackedScene" uid="uid://btbwj5dwxmsb5" path="res://TerrainTiles/water.tscn" id="1_psiup"]
+[ext_resource type="PackedScene" uid="uid://bs37de4k1kp6n" path="res://TerrainTiles/water_corner.tscn" id="2_3qame"]
+[ext_resource type="PackedScene" uid="uid://bw2fav6dm8r5t" path="res://TerrainTiles/water_edge.tscn" id="3_cypba"]
+[ext_resource type="PackedScene" uid="uid://lvxku28pvcy2" path="res://TerrainTiles/grass.tscn" id="4_l5paj"]
+[ext_resource type="PackedScene" uid="uid://bo6ixyb6ivsbc" path="res://TerrainTiles/ramp.tscn" id="5_0tn13"]
+[ext_resource type="PackedScene" uid="uid://b4nh8ae0uv4k4" path="res://TerrainTiles/ramp_corner.tscn" id="6_21lxm"]
+[ext_resource type="PackedScene" uid="uid://r3attbe54kel" path="res://TerrainTiles/cliffs.tscn" id="7_1ubri"]
+[ext_resource type="PackedScene" uid="uid://ci3xp1iywxf2o" path="res://TerrainTiles/cliffs_corner.tscn" id="8_2ix0w"]
+
+[node name="GridMeshesLoader" type="Node3D"]
+
+[node name="Water" parent="." instance=ExtResource("1_psiup")]
+
+[node name="Water_Corner" parent="." instance=ExtResource("2_3qame")]
+
+[node name="Water_Edge" parent="." instance=ExtResource("3_cypba")]
+
+[node name="Grass" parent="." instance=ExtResource("4_l5paj")]
+
+[node name="Ramp" parent="." instance=ExtResource("5_0tn13")]
+
+[node name="Ramp_Corner" parent="." instance=ExtResource("6_21lxm")]
+
+[node name="Cliffs" parent="." instance=ExtResource("7_1ubri")]
+
+[node name="Cliffs_Corner" parent="." instance=ExtResource("8_2ix0w")]

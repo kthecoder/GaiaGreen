@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://r3attbe54kel"]
+
+[ext_resource type="PackedScene" uid="uid://c1kj5kubopmqp" path="res://TerrainTiles/Cliffs.glb" id="1_nif20"]
+
+[node name="Cliffs" instance=ExtResource("1_nif20")]
+
+[node name="6_Cliffs" parent="." index="0"]
+transform = Transform3D(1.19249e-08, 0, -1, 0, 1, 0, 1, 0, 1.19249e-08, 0, 0, 0)

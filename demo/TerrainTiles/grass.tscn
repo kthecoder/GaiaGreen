@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3 uid="uid://lvxku28pvcy2"]
+
+[ext_resource type="PackedScene" uid="uid://dvg8m0ef2aocw" path="res://TerrainTiles/Grass.glb" id="1_gfmh5"]
+
+[node name="Grass" instance=ExtResource("1_gfmh5")]

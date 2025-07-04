@@ -63,3 +63,7 @@ _Currently Commented Out for Base Development_
 
 This repository comes with a GitHub action that builds the GDExtension for cross-platform use. It triggers automatically for each pushed change. You can find and edit it in [builds.yml](.github/workflows/builds.yml).
 After a workflow run is complete, you can find the file `godot-cpp-template.zip` on the `Actions` tab on GitHub.
+
+# Contributing
+
+Any and all Contributions are subject to the [CLA.md](https://github.com/kthecoder/GaiaGreen/blob/main/CLA.md)

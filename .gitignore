@@ -59,4 +59,4 @@ compile_commands.json
 .idea/
 
 #Assets
-/demo/TerrainTiles/*
+# /demo/TerrainTiles/*

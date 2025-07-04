@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://bo6ixyb6ivsbc"]
+
+[ext_resource type="PackedScene" uid="uid://b18axhxcfl431" path="res://TerrainTiles/Ramp.glb" id="1_k1pvt"]
+
+[node name="Ramp" instance=ExtResource("1_k1pvt")]
+
+[node name="4_Ramp" parent="." index="0"]
+transform = Transform3D(1.19249e-08, 0, -1, 0, 1, 0, 1, 0, 1.19249e-08, 0, 0, 0)

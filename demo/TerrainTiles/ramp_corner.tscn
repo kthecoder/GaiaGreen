@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3 uid="uid://b4nh8ae0uv4k4"]
+
+[ext_resource type="PackedScene" uid="uid://fgi2u8tthheh" path="res://TerrainTiles/Ramp_Corner.glb" id="1_g1mpg"]
+
+[node name="Ramp_Corner" instance=ExtResource("1_g1mpg")]

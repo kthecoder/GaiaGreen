@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3 uid="uid://db8x0teqybac3"]
+
+[ext_resource type="PackedScene" uid="uid://dyc7i04xtmjg6" path="res://TerrainTiles/Cliffs_Corner_West.glb" id="1_bsla6"]
+
+[node name="Cliffs_Corner_West2" instance=ExtResource("1_bsla6")]

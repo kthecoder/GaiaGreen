@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://bw2fav6dm8r5t"]
+
+[ext_resource type="PackedScene" uid="uid://cr5vwent0sv6" path="res://TerrainTiles/Water_Edge.glb" id="1_qr8or"]
+
+[node name="Water_Edge" instance=ExtResource("1_qr8or")]
+
+[node name="2_Water_Edge" parent="." index="0"]
+transform = Transform3D(1.19249e-08, 0, -1, 0, 1, 0, 1, 0, 1.19249e-08, 0, 0, 0)

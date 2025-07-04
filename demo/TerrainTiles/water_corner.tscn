@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3 uid="uid://bs37de4k1kp6n"]
+
+[ext_resource type="PackedScene" uid="uid://cyeaobtarjrsf" path="res://TerrainTiles/Water_Corner.glb" id="1_d6ore"]
+
+[node name="Water_Corner" instance=ExtResource("1_d6ore")]
