@@ -43,9 +43,6 @@ protected:
 
 	static void _bind_methods();
 
-private:
-	TileType isCornerTile(int x, int y, vector<vector<TileType>> &tileMap);
-
 public:
 	TerrainGen();
 	~TerrainGen();
