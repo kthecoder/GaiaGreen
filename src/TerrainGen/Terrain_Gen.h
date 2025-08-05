@@ -21,6 +21,13 @@ class TerrainGen : public Node {
 	GDCLASS(TerrainGen, Node);
 
 protected:
+	enum Rotation {
+		NORTH,
+		EAST,
+		SOUTH,
+		WEST
+	};
+
 	enum TileType {
 		WATER, // Pure water tile, Connects to bottom of Water Edge tiles and other Water tiles
 		WATER_CORNER, // Water corner with a section of ground at the top height, Connects to corners of water on one side and ground on the other

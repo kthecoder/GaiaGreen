@@ -26,16 +26,20 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 
 	*****************************************************/
 
-	vector<vector<vector<int>>> gridMap(
-			depth, vector<vector<int>>(width, vector<int>(height, 0)));
-
+	// Raw Noise -> Stored for possible random value use
 	vector<vector<float>> rawNoise(width, vector<float>(height, 0));
-	vector<vector<int>> elevationMap(width, vector<int>(height, 0));
+	// Data Grid -> Simply an Elevation Map double the size of our Render Grid
+	vector<vector<int>> elevationMap(width * 2, vector<int>(height * 2, 0));
+	// Render Grid
 	vector<vector<TileType>> tileMap(width, vector<TileType>(height, GROUND));
 
+	// Produce a 2x Grid for the Data Grid
+	int widthx2 = width * 2;
+	int heightx2 = height * 2;
+
 	int blockSize = 4;
-	int reducedX = floor(width / blockSize);
-	int reducedY = floor(height / blockSize);
+	int reducedX = floor(widthx2 / blockSize);
+	int reducedY = floor(heightx2 / blockSize);
 	vector<vector<int>> lowResMap(reducedX, vector<int>(reducedY, 0));
 
 	int dx[4] = { 1, -1, 0, 0 };
@@ -48,8 +52,8 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 	*****************************************************/
 
 	// Generate the Elevation Map
-	for (int x = 0; x < width; x++) {
-		for (int y = 0; y < height; y++) {
+	for (int x = 0; x < widthx2; x++) {
+		for (int y = 0; y < heightx2; y++) {
 			float currentNoise = noise->get_noise_2d((float)x, (float)y);
 
 			rawNoise[x][y] = currentNoise;
@@ -78,8 +82,8 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 	}
 
 	// Upscale back to Original Size
-	for (int x = 0; x < width; x++) {
-		for (int y = 0; y < height; y++) {
+	for (int x = 0; x < widthx2; x++) {
+		for (int y = 0; y < heightx2; y++) {
 			int srcX = x / blockSize;
 			int srcY = y / blockSize;
 
@@ -99,8 +103,8 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 	//TODO...
 
 	// Water Clean Up
-	for (int x = 1; x < width - 1; x++) {
-		for (int y = 1; y < height - 1; y++) {
+	for (int x = 1; x < widthx2 - 1; x++) {
+		for (int y = 1; y < heightx2 - 1; y++) {
 			if (elevationMap[x][y] > 0) { // Check if it's an elevated tile
 				int waterCount = 0;
 
@@ -130,11 +134,147 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 	// Loop over all the grid cells
 	for (int x = 0; x < width; ++x) {
 		for (int y = 0; y < height; ++y) {
-			//Get the elevation for the current grid cell
-			int elevation = elevationMap[x][y];
+			// Godot GridMap Tile Rotation
+			//
+			// North = 0; // No rotation
+			// South = 16;
+			// East = 10;
+			// West = 22;
+			//
+			int tilesRotation = 0;
 
-			//Init the current grid cell to ground
-			tileMap[x][y] = GROUND;
+			//
+			// +----+----+
+			// | n1 | n2 |
+			// +----+----+
+			// | n3 | n4 |
+			// +----+----+
+			//
+			// Get the surrounding DataGrid Neighbors overlap of the Render Grid
+			int n1 = elevationMap[y][x];
+			int n2 = elevationMap[y][x + 1];
+			int n3 = elevationMap[y + 1][x];
+			int n4 = elevationMap[y + 1][x + 1];
+
+			// Determine Elevation Changes
+			//
+			// 	Elevation change needs to be known in Left, Right, Up, & Down
+			//	due to the determination of a tiles type and rotation
+			//
+			//  ! Unneeded due to the simpler way of just using neighbor values
+			//
+			// bool change1right = n1 < n2; // n1 -> n2
+			// bool change3down = n1 < n3; // n1 -> n3
+			// bool change3right = n3 < n4; // n3 -> n4
+			// bool change4down = n2 < n4; // n2 -> n4
+
+			// bool change1left = n1 > n2; // n1 -> n2
+			// bool change2up = n1 > n3; // n1 -> n3
+			// bool change3left = n3 > n4; // n3 -> n4
+			// bool change4up = n2 > n4; // n2 -> n4
+
+			// Water's Water
+			// +---+---+
+			// | 0 | 0 |
+			// +---+---+
+			// | 0 | 0 |
+			// +---+---+
+			//
+			if (n1 == 0 && n2 == 0 && n3 == 0 && n4 == 0) {
+				tileMap[x][y] = WATER;
+			}
+
+			// Ground's Ground
+			// +----+----+  +---+---+  +---+---+
+			// | n1 | n2 |  | 1 | 1 |  | 2 | 2 |
+			// +----+----+  +---+---+  +---+---+
+			// | n3 | n4 |  | 1 | 1 |  | 2 | 2 |
+			// +----+----+  +---+---+  +---+---+
+			//
+			if (n1 == n2 && n2 == n3 && n3 == 4 && n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0) {
+				tileMap[x][y] = GROUND;
+			}
+
+			// Water's Edge South
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 0 | 0 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 1 |
+			// +----+----+  +---+---+
+			//
+			if (n1 == 0 && n2 == 0 && n3 > 0 && n4 > 0) {
+				tileMap[x][y] = WATER_EDGE;
+				tilesRotation = 16; // Facing South
+			}
+			// Water's Edge North
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 |1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 0 | 0 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 > 0 && n2 > 0 && n3 == 0 && n4 == 0) {
+				tileMap[x][y] = WATER_EDGE;
+				tilesRotation = 0; // Facing North
+			}
+			// Water's Edge East
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 0 | 1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 0 | 1 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 == 0 && n3 == 0 && n2 > 0 && n4 > 0) {
+				tileMap[x][y] = WATER_EDGE;
+				tilesRotation = 10; // Facing East
+
+			}
+			// Water's Edge West
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 0 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 0 |
+			// +----+----+  +---+---+
+			//
+			else if (n2 == 0 && n4 == 0 && n1 > 0 && n3 > 0) {
+				tileMap[x][y] = WATER_EDGE;
+				tilesRotation = 22; // Facing West
+			}
+
+			// Water's Corner's
+			if (n1 == 0 && n2 == 0 && n3 == 0 && n4 > 0) {
+				tileMap[x][y] = WATER_CORNER; // Land in SE
+			} else if (n1 > 0 && n2 == 0 && n3 == 0 && n4 == 0) {
+				tileMap[x][y] = WATER_CORNER; // Land in NW
+			}
+
+			// Cliff's Edge
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 2 | 1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 2 | 1 |
+			// +----+----+  +---+---+
+			//
+			// TODO : Determine the way of choosing between cliffs and ramps
+			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0) {
+				tileMap[x][y] = CLIFF;
+			}
+
+			// Cliff's Edge
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 2 | 1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 2 | 1 |
+			// +----+----+  +---+---+
+			//
+			// TODO : Determine the way of choosing between cliffs and ramps
+			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n3 > n4) {
+				tileMap[x][y] = CLIFF;
+			}
+
+			// TODO : Add rest of the logic for all tile types
+
+			// TODO : Remove unneeded Code below
 
 			// Setup booleans & Ints
 			bool needsRamp = false, needsCliff = false, adjacentToWater = false;
