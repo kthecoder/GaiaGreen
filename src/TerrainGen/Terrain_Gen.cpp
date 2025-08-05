@@ -173,6 +173,10 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			// bool change3left = n3 > n4; // n3 -> n4
 			// bool change4up = n2 > n4; // n2 -> n4
 
+			//-------------------------//
+			// Basic Tiles
+			//-------------------------//
+
 			// Water's Water
 			// +---+---+
 			// | 0 | 0 |
@@ -195,6 +199,10 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 				tileMap[x][y] = GROUND;
 			}
 
+			//-------------------------//
+			// Water Edges
+			//-------------------------//
+
 			// Water's Edge South
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
@@ -204,7 +212,7 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			//
 			if (n1 == 0 && n2 == 0 && n3 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = 16; // Facing South
+				tilesRotation = SOUTH;
 			}
 			// Water's Edge North
 			// +----+----+  +---+---+
@@ -215,7 +223,7 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			//
 			else if (n1 > 0 && n2 > 0 && n3 == 0 && n4 == 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = 0; // Facing North
+				tilesRotation = NORTH;
 			}
 			// Water's Edge East
 			// +----+----+  +---+---+
@@ -226,7 +234,7 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			//
 			else if (n1 == 0 && n3 == 0 && n2 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = 10; // Facing East
+				tilesRotation = EAST;
 
 			}
 			// Water's Edge West
@@ -238,15 +246,112 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			//
 			else if (n2 == 0 && n4 == 0 && n1 > 0 && n3 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = 22; // Facing West
+				tilesRotation = WEST;
 			}
 
-			// Water's Corner's
+			//-------------------------//
+			// Water Corners
+			//-------------------------//
+
+			// Water's Corner North
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 0 | 0 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 0 | 1 |
+			// +----+----+  +---+---+
+			//
 			if (n1 == 0 && n2 == 0 && n3 == 0 && n4 > 0) {
-				tileMap[x][y] = WATER_CORNER; // Land in SE
-			} else if (n1 > 0 && n2 == 0 && n3 == 0 && n4 == 0) {
-				tileMap[x][y] = WATER_CORNER; // Land in NW
+				tileMap[x][y] = WATER_CORNER;
+				tilesRotation = NORTH;
 			}
+			// Water's Corner South
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 0 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 0 | 0 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 > 0 && n2 == 0 && n3 == 0 && n4 == 0) {
+				tileMap[x][y] = WATER_CORNER;
+				tilesRotation = SOUTH;
+			}
+			// Water's Corner East
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 0 | 1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 0 | 0 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 == 0 && n2 > 0 && n3 == 0 && n4 == 0) {
+				tileMap[x][y] = WATER_CORNER;
+				tilesRotation = EAST;
+			}
+			// Water's Corner West
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 0 | 0 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 0 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 == 0 && n2 == 0 && n3 > 0 && n4 == 0) {
+				tileMap[x][y] = WATER_CORNER;
+				tilesRotation = WEST;
+			}
+
+			//-------------------------//
+			// Cliff's & Ramp's Corner
+			//-------------------------//
+
+			//TODO : Decide how cliffs vs ramps are picked
+
+			// Corner North
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			//
+			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n4 > n1 && n4 > n2 && n4 > n3) {
+				tileMap[x][y] = CLIFF_CORNER;
+				tilesRotation = NORTH;
+			}
+			// Corner South
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 2 | 1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 1 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n1 > n3 && n1 > n4) {
+				tileMap[x][y] = CLIFF_CORNER;
+				tilesRotation = SOUTH;
+			}
+			// Corner East
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 1 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n2 > n1 && n2 > n3 && n2 > n4) {
+				tileMap[x][y] = CLIFF_CORNER;
+				tilesRotation = EAST;
+			}
+			// Corner East
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 0 | 0 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 0 |
+			// +----+----+  +---+---+
+			//
+			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n3 > n1 && n3 > n2 && n3 > n4) {
+				tileMap[x][y] = CLIFF_CORNER;
+				tilesRotation = WEST;
+			}
+
+			//-------------------------//
+			// Cliff's & Ramp's Edges
+			//-------------------------//
 
 			// Cliff's Edge
 			// +----+----+  +---+---+
@@ -417,13 +522,15 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 
 			/*****************************************************
 
-				Grid Map Cell Setter
+	Grid Map Cell Setter
 
-			*****************************************************/
+*****************************************************/
 
 			myGridMap->set_cell_item(Vector3i(x, elevation, y), tileMap[x][y], rotationOrientation);
 		}
 	}
+
+	//TODO : Another run through required to check adjacent tiles, especially tiles touching corner tiles. TO ensure a cliff corner connects to cliffs
 }
 
 TerrainGen::TileType TerrainGen::isCornerTile(int x, int y, vector<vector<TileType>> &tileMap) {
