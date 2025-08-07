@@ -49,7 +49,16 @@ public:
 
 	//Generate Terrain
 	//Takes in a height & width for size of map on the X & Z axis
-	void generate(GridMap *myGridMap, int height, int width, int depth, int seed, int noiseType, double waterRemoval, float noiseFreq = 0.005);
+	void generate(
+			GridMap *myGridMap,
+			int height,
+			int width,
+			int elevationMax,
+			int seed,
+			int openAreaMin,
+			int noiseType,
+			double waterRemoval,
+			float noiseFreq = 0.005);
 };
 
 #endif

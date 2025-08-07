@@ -9,30 +9,36 @@ TerrainGen::TerrainGen() {
 TerrainGen::~TerrainGen() {
 }
 
-void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, int seed, int noiseType, double waterRemoval, float noiseFreq) {
+void TerrainGen::generate(
+		GridMap *myGridMap,
+		int height,
+		int width,
+		int elevationMax, // i.e. Depth/Height
+		int seed,
+		int openAreaMin,
+		int noiseType,
+		double waterRemoval,
+		float noiseFreq) {
 	/*****************************************************
 
-		Setup the Noise Function
+		Setup
 
 	*****************************************************/
-	noise->set_noise_type(static_cast<FastNoiseLite::NoiseType>(noiseType));
-	noise->set_fractal_type(FastNoiseLite::FractalType::FRACTAL_NONE);
-	noise->set_seed(seed);
-	noise->set_frequency(noiseFreq);
-
-	/*****************************************************
-
-		Function dependent Variables
-
-	*****************************************************/
+	struct Flat3x3s {
+		int x, elevation, y;
+	};
+	vector<Flat3x3s> flatZones;
 
 	// Raw Noise -> Stored for possible random value use
 	vector<vector<float>> rawNoise(width, vector<float>(height, 0));
 	// Data Grid -> Simply an Elevation Map double the size of our Render Grid
 	vector<vector<int>> elevationMap(width * 2, vector<int>(height * 2, 0));
+	// Real Grid
+	vector<vector<int>> realGrid(width, vector<int>(height, 0));
 	// Render Grid
 	vector<vector<TileType>> tileMap(width, vector<TileType>(height, GROUND));
 
+	// Dual Grid System Setup
 	// Produce a 2x Grid for the Data Grid
 	int widthx2 = width * 2;
 	int heightx2 = height * 2;
@@ -47,7 +53,19 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 
 	/*****************************************************
 
-		Noise Elevation Generation & Modification
+		Setup the Noise Function
+
+	*****************************************************/
+	noise->set_noise_type(static_cast<FastNoiseLite::NoiseType>(noiseType));
+	noise->set_fractal_type(FastNoiseLite::FractalType::FRACTAL_NONE);
+	noise->set_seed(seed);
+	noise->set_frequency(noiseFreq);
+
+	/*****************************************************
+
+		Produce Random Noise & Generate Height Map
+
+			Generates Height map in the Doubled Grid Size
 
 	*****************************************************/
 
@@ -57,11 +75,20 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 			float currentNoise = noise->get_noise_2d((float)x, (float)y);
 
 			rawNoise[x][y] = currentNoise;
-			// Normalize and scale noise to [0, depth]
+			// Normalize and scale noise to [0, elevationMax]
 			float normalizedNoise = (currentNoise + 1.0f) / 2.0f;
-			elevationMap[x][y] = round(normalizedNoise * depth);
+			elevationMap[x][y] = round(normalizedNoise * elevationMax);
 		}
 	}
+
+	/*****************************************************
+
+		Noise Conversion
+
+			Take normalized & scaled noise and convert it
+			to a blocky square splotch pattern
+
+	*****************************************************/
 
 	// Reduce Resolution by sampling one pixel per block
 	for (int x = 0; x < reducedX; x++) {
@@ -77,7 +104,7 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 	for (int x = 0; x < reducedX; x++) {
 		for (int y = 0; y < reducedY; y++) {
 			int quantizedLevel = round(lowResMap[x][y]);
-			lowResMap[x][y] = max(0, min(depth, quantizedLevel));
+			lowResMap[x][y] = max(0, min(elevationMax, quantizedLevel));
 		}
 	}
 
@@ -98,36 +125,168 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 		}
 	}
 
-	//Smoothing
-	// 	Ensure elevation change's aren't in succession
-	//TODO...
+	/*****************************************************
 
-	// Water Clean Up
-	for (int x = 1; x < widthx2 - 1; x++) {
-		for (int y = 1; y < heightx2 - 1; y++) {
-			if (elevationMap[x][y] > 0) { // Check if it's an elevated tile
-				int waterCount = 0;
+		Cellular Automata Filter A
 
-				// Check surrounding 3x3 neighbors
-				for (int dx = -1; dx <= 1; dx++) {
-					for (int dy = -1; dy <= 1; dy++) {
-						if (elevationMap[x + dx][y + dy] == 0) {
-							waterCount++;
-						}
+			Find flat 3x3 zones and expand
+
+	*****************************************************/
+
+	//
+	// Phase One : Locate Natural 3x3 chunks
+	//
+	int openAreaCount = 0;
+	while (openAreaCount < openAreaMin) {
+		// Due to the Dual Grid Tile Assignment System
+		// We really need to ensure the dual grid has 4x4 open areas
+		// Which we will call 3x3's since they eventually become 3x3 tile chunks
+		int FlatChunks3x3 = 0; // 3x3's (4x4 due to Dual Grid)
+		int FlatChunks2x2 = 0; // 2x2's (3x3 due to Dual Grid)
+
+		// Locate natural 3x3 Flat Ground Areas
+		if (FlatChunks3x3 != -1) {
+			int total3x3 = 0;
+			// Start at 1,1 due to neighbor checks
+			// Go over chunks, not every cell
+			for (int x = 1; x < widthx2 - 4; x += 4) {
+				for (int y = 1; y < heightx2 - 4; y += 4) {
+					// n6 is our center cell
+					// +----+----+----+----+
+					// | n1 | n2 | n3 | n4 |
+					// +----+----+----+----+
+					// | n5 | n6 | n7 | n8 |
+					// +----+----+----+----+
+					// | n9 | n10 | n11 | n12 |
+					// +----+----+----+----+
+					// | n13 | n14 | n15 | n16 |
+					// +----+----+----+----+
+					int n6 = elevationMap[x][y];
+					bool eqN1 = n6 == elevationMap[x - 1][y - 1];
+					bool eqN2 = n6 == elevationMap[x][y - 1];
+					bool eqN3 = n6 == elevationMap[x + 1][y - 1];
+					bool eqN4 = n6 == elevationMap[x + 2][y - 1];
+					bool eqN5 = n6 == elevationMap[x - 1][y];
+					bool eqN7 = n6 == elevationMap[x + 1][y];
+					bool eqN8 = n6 == elevationMap[x + 2][y];
+					bool eqN9 = n6 == elevationMap[x - 1][y + 1];
+					bool eqN10 = n6 == elevationMap[x][y + 1];
+					bool eqN11 = n6 == elevationMap[x + 1][y + 1];
+					bool eqN12 = n6 == elevationMap[x + 2][y + 1];
+					bool eqN13 = n6 == elevationMap[x - 1][y + 2];
+					bool eqN14 = n6 == elevationMap[x][y + 2];
+					bool eqN15 = n6 == elevationMap[x + 1][y + 2];
+					bool eqN16 = n6 == elevationMap[x + 2][y + 2];
+
+					if (eqN1 && eqN2 && eqN3 && eqN4 && eqN5 && eqN7 && eqN8 &&
+							eqN9 && eqN10 && eqN11 && eqN12 && eqN13 && eqN14 && eqN15 && eqN16) {
+						total3x3 += 1;
+						openAreaCount += 1;
+						if (flatZones.size() >= openAreaMin)
+							break;
 					}
 				}
+			}
 
-				// If it's surrounded by water, set elevation to 0
-				if (waterCount >= 5) {
-					elevationMap[x][y] = 0;
-				}
+			// If None, deny entry back into if statement
+			if (total3x3 == 0) {
+				FlatChunks3x3 = -1;
 			}
 		}
 	}
 
+	//
+	// Phase Two : Find 2x2's and Expand
+	//
+
+	//
+	// Phase Three : Expand Single Cell's if openAreaMin still not satisfied
+	//
+
+	/*****************************************************
+
+		Cellular Automata Filter B
+
+			Patching / Removing Outliers
+
+	*****************************************************/
+
+	/*****************************************************
+
+		Cellular Automata Filter C
+
+			Water Reduction
+
+	*****************************************************/
+
+	/*****************************************************
+
+		Hydrology Path Generation
+
+			Using the RawNoise -> Downhill Flow, Flow Accumulation
+
+			Define non-placeable cells for
+			Poisson Disk Sampling
+
+	*****************************************************/
+
+	//
+	// Phase One : Downhill Flow
+	//
+	//		Assign Movement Cost, Using slope descent,
+	//		point to the lowest cost neighbor
+	//
+
+	//
+	// Phase Two : Flow Accumulation
+	//
+	//		Using slope descent, point to the lowest cost
+	//		neighbor
+	//
+
+	//
+	// Phase X : Define Walkable Areas
+	//
+	//		Use the walkable area map later in
+	//		Tile Placement to enforce Ramps over Cliffs
+	//
+	//		Determine path sizes based on Flow Accumulation
+	//
+
+	/*****************************************************
+
+		Dual Grid Phase Two
+
+			Reduce big data grid into real size
+
+	*****************************************************/
+
+	/*****************************************************
+
+		Open Area Finder
+
+			Find areas that have 3x3 flat areas
+			Used for placing Large Structures
+
+	*****************************************************/
+
+	// TODO : Find Flat Zones
+	// flatZones.push_back({ x, realGrid[x][y], y });
+
+	/*****************************************************
+
+		Poisson Object Placement
+
+			TBD
+
+	*****************************************************/
+
 	/*****************************************************
 
 	Tile Placement
+
+		Using a dual grid system, determine the correct
+		tile's for each cell
 
 	*****************************************************/
 
@@ -413,5 +572,5 @@ void TerrainGen::generate(GridMap *myGridMap, int height, int width, int depth, 
 }
 
 void TerrainGen::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "depth", "seed", "noiseType", "waterRemoval", "noiseFreq"), &TerrainGen::generate);
+	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "noiseType", "waterRemoval", "noiseFreq"), &TerrainGen::generate);
 }
