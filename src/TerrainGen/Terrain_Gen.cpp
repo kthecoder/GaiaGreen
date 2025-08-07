@@ -24,38 +24,70 @@ void TerrainGen::generate(
 		Setup
 
 	*****************************************************/
+
+	// int dx[4] = { 1, -1, 0, 0 };
+	// int dy[4] = { 0, 0, 1, -1 };
+
+	//	Dual Grid System Setup
+	//
+	// 	  Produce a 2x Grid for the Data Grid
+	//
+	int widthx2 = width * 2;
+	int heightx2 = height * 2;
+
+	//
+	// Noise Conversion Variables
+	//
+	int blockSize = 4;
+	int reducedX = floor(widthx2 / blockSize);
+	int reducedY = floor(heightx2 / blockSize);
+
+	//
+	// Open Area Tracker
+	//
 	struct Flat3x3s {
 		int x, elevation, y;
 	};
 	vector<Flat3x3s> flatZones;
 
+	//
+	// Hydrology Path System
+	//
+	struct FlowCell {
+		int flowToX = -1;
+		int flowToY = -1;
+		float slope = 0.0f;
+	};
+
+	float totalFlow = 0.0f;
+	int flowCount = 0;
+
+	vector<vector<FlowCell>> flowMap(widthx2, vector<FlowCell>(heightx2));
+	vector<vector<int>> flowAccumulation(widthx2, vector<int>(heightx2, 1));
+	vector<vector<vector<pair<int, int>>>> inflowMap(widthx2, vector<vector<pair<int, int>>>(heightx2));
+	vector<vector<bool>> walkableMap(widthx2, vector<bool>(heightx2, true)); // Default: walkable
+
+	//
+	// Management Grids
+	//
+	//		Track: Low Res Map, Raw Noise, Elevation Map, Render Grid Tile Type
+	//
+
+	// Stores the Lower Resolution map for Noise Conversion
+	vector<vector<int>> lowResMap(reducedX, vector<int>(reducedY, 0));
 	// Raw Noise -> Stored for possible random value use
 	vector<vector<float>> rawNoise(width, vector<float>(height, 0));
 	// Data Grid -> Simply an Elevation Map double the size of our Render Grid
 	vector<vector<int>> elevationMap(width * 2, vector<int>(height * 2, 0));
-	// Real Grid
-	vector<vector<int>> realGrid(width, vector<int>(height, 0));
-	// Render Grid
+	// Render Grid -> Real size grid with final tile type values
 	vector<vector<TileType>> tileMap(width, vector<TileType>(height, GROUND));
-
-	// Dual Grid System Setup
-	// Produce a 2x Grid for the Data Grid
-	int widthx2 = width * 2;
-	int heightx2 = height * 2;
-
-	int blockSize = 4;
-	int reducedX = floor(widthx2 / blockSize);
-	int reducedY = floor(heightx2 / blockSize);
-	vector<vector<int>> lowResMap(reducedX, vector<int>(reducedY, 0));
-
-	int dx[4] = { 1, -1, 0, 0 };
-	int dy[4] = { 0, 0, 1, -1 };
 
 	/*****************************************************
 
 		Setup the Noise Function
 
 	*****************************************************/
+
 	noise->set_noise_type(static_cast<FastNoiseLite::NoiseType>(noiseType));
 	noise->set_fractal_type(FastNoiseLite::FractalType::FRACTAL_NONE);
 	noise->set_seed(seed);
@@ -137,6 +169,7 @@ void TerrainGen::generate(
 	// Phase One : Locate Natural 3x3 chunks
 	//
 	int openAreaCount = 0;
+
 	while (openAreaCount < openAreaMin) {
 		// Due to the Dual Grid Tile Assignment System
 		// We really need to ensure the dual grid has 4x4 open areas
@@ -193,15 +226,15 @@ void TerrainGen::generate(
 				FlatChunks3x3 = -1;
 			}
 		}
+
+		// TODO
+		// Phase Two : Find 2x2's and Expand
+		//
+
+		// TODO
+		// Phase Three : Expand Single Cell's if openAreaMin still not satisfied
+		//
 	}
-
-	//
-	// Phase Two : Find 2x2's and Expand
-	//
-
-	//
-	// Phase Three : Expand Single Cell's if openAreaMin still not satisfied
-	//
 
 	/*****************************************************
 
@@ -231,55 +264,139 @@ void TerrainGen::generate(
 	*****************************************************/
 
 	//
-	// Phase One : Downhill Flow
+	// Phase 1 : Downhill Flow
 	//
 	//		Assign Movement Cost, Using slope descent,
 	//		point to the lowest cost neighbor
 	//
 
+	for (int x = 1; x < widthx2 - 1; x++) {
+		for (int y = 1; y < heightx2 - 1; y++) {
+			float currentElevation = rawNoise[x][y];
+			float lowestElevation = currentElevation;
+			int targetX = x;
+			int targetY = y;
+
+			// Check 8 neighbors
+			for (int dx = -1; dx <= 1; dx++) {
+				for (int dy = -1; dy <= 1; dy++) {
+					if (dx == 0 && dy == 0)
+						continue;
+
+					int nx = x + dx;
+					int ny = y + dy;
+					float neighborElevation = rawNoise[nx][ny];
+
+					if (neighborElevation < lowestElevation) {
+						lowestElevation = neighborElevation;
+						targetX = nx;
+						targetY = ny;
+					}
+				}
+			}
+
+			flowMap[x][y].flowToX = targetX;
+			flowMap[x][y].flowToY = targetY;
+			flowMap[x][y].slope = currentElevation - lowestElevation;
+		}
+	}
+
 	//
-	// Phase Two : Flow Accumulation
+	// Phase 2 : Flow Accumulation
 	//
 	//		Using slope descent, point to the lowest cost
 	//		neighbor
 	//
 
+	// Inflow Map Builder
 	//
-	// Phase X : Define Walkable Areas
+	//	 Who flows into each cell
+	for (int x = 1; x < widthx2 - 1; ++x) {
+		for (int y = 1; y < heightx2 - 1; ++y) {
+			int tx = flowMap[x][y].flowToX;
+			int ty = flowMap[x][y].flowToY;
+			if (tx != x || ty != y) {
+				inflowMap[tx][ty].emplace_back(x, y);
+			}
+		}
+	}
+
+	// Flow Accumulation Tracker
 	//
-	//		Use the walkable area map later in
-	//		Tile Placement to enforce Ramps over Cliffs
+	//	 Find flow by iterating over all cells
+	//
+	for (int x = 1; x < widthx2 - 1; ++x) {
+		for (int y = 1; y < heightx2 - 1; ++y) {
+			for (auto &upstream : inflowMap[x][y]) {
+				int ux = upstream.first;
+				int uy = upstream.second;
+				flowAccumulation[x][y] += flowAccumulation[ux][uy];
+			}
+
+			totalFlow += flowAccumulation[x][y];
+			++flowCount;
+		}
+	}
+
+	float averageFlow = (flowCount > 0) ? totalFlow / flowCount : 0.0f;
+
+	//
+	// Phase 3 : Define Walkable Areas
+	//
+	//		Using the flow paths & accumulation counts
+	//		determine walkable area's on the map
+	//
+	//		Used later in Tile Placement to enforce
+	//		Ramps over Cliffs
 	//
 	//		Determine path sizes based on Flow Accumulation
+	//		Mark more cells in perpendicular direction to flow direction
+	//		for cells with larger accumulation
 	//
 
-	/*****************************************************
+	int maxRiverWidth = 3; // Max number of perpendicular cells (to river flow direction) to mark
 
-		Dual Grid Phase Two
+	for (int x = 1; x < widthx2 - 1; x++) {
+		for (int y = 1; y < heightx2 - 1; y++) {
+			float flow = flowAccumulation[x][y];
+			if (flow < averageFlow)
+				continue; // Only mark above-average flow cells
 
-			Reduce big data grid into real size
+			walkableMap[x][y] = false;
 
-	*****************************************************/
+			int dx = flowMap[x][y].flowToX - x;
+			int dy = flowMap[x][y].flowToY - y;
 
-	/*****************************************************
+			int perpX1 = -dy;
+			int perpY1 = dx;
+			int perpX2 = dy;
+			int perpY2 = -dx;
 
-		Open Area Finder
+			int riverWidth = min(maxRiverWidth, static_cast<int>(flow / averageFlow));
 
-			Find areas that have 3x3 flat areas
-			Used for placing Large Structures
+			for (int w = 1; w <= riverWidth; w++) {
+				int px1 = x + perpX1 * w;
+				int py1 = y + perpY1 * w;
+				int px2 = x + perpX2 * w;
+				int py2 = y + perpY2 * w;
 
-	*****************************************************/
+				if (px1 > 0 && px1 < widthx2 && py1 > 0 && py1 < heightx2)
+					walkableMap[px1][py1] = false;
 
-	// TODO : Find Flat Zones
-	// flatZones.push_back({ x, realGrid[x][y], y });
+				if (px2 > 0 && px2 < widthx2 && py2 > 0 && py2 < heightx2)
+					walkableMap[px2][py2] = false;
+			}
+		}
+	}
 
-	/*****************************************************
-
-		Poisson Object Placement
-
-			TBD
-
-	*****************************************************/
+	//
+	// Phase 4 : Setting Walkable Area's
+	//
+	//		Modify Elevation Map to ensure walkable area's are expressed
+	//
+	//		If the majority of cells in a 2x2 are marked walkable,
+	//		ensure elevation map's neighbors are equal value
+	//
 
 	/*****************************************************
 
@@ -291,8 +408,8 @@ void TerrainGen::generate(
 	*****************************************************/
 
 	// Loop over all the grid cells
-	for (int x = 0; x < width; ++x) {
-		for (int y = 0; y < height; ++y) {
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
 			// Godot GridMap Tile Rotation
 			int tilesRotation = NORTH;
 
@@ -568,7 +685,46 @@ void TerrainGen::generate(
 		}
 	}
 
-	//TODO : Another run through required to check adjacent tiles, especially tiles touching corner tiles. TO ensure a cliff corner connects to cliffs
+	/*****************************************************
+
+		Open Area Finder
+
+			Find areas that have 3x3 flat areas
+			Used for placing Large Structures
+
+	*****************************************************/
+
+	for (int i = 0; i <= width - 3; i += 3) {
+		for (int j = 0; j <= height - 3; j += 3) {
+			bool allGround = true;
+
+			// Check Neighbors
+			for (int dx = 0; dx < 3 && allGround; dx++) {
+				for (int dy = 0; dy < 3; dy++) {
+					if (tileMap[i + dx][j + dy] != GROUND) {
+						allGround = false;
+						break;
+					}
+				}
+			}
+
+			if (allGround) {
+				int centerX = i + 1;
+				int centerY = j + 1;
+				int elevation = elevationMap[centerX][centerY];
+
+				flatZones.push_back({ centerX, elevation, centerY });
+			}
+		}
+	}
+
+	/*****************************************************
+
+		Poisson Object Placement
+
+			TBD
+
+	*****************************************************/
 }
 
 void TerrainGen::_bind_methods() {
