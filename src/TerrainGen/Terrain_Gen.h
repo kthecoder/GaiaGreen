@@ -7,6 +7,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
+#include <random>
 #include <vector>
 
 #include <godot_cpp/classes/image.hpp>
@@ -58,6 +59,7 @@ public:
 			int openAreaMin,
 			int noiseType,
 			double waterRemoval,
+			float rampPercentage = 0.5,
 			float noiseFreq = 0.005);
 };
 

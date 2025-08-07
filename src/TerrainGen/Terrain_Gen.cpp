@@ -18,6 +18,7 @@ void TerrainGen::generate(
 		int openAreaMin,
 		int noiseType,
 		double waterRemoval,
+		float rampPercentage,
 		float noiseFreq) {
 	/*****************************************************
 
@@ -49,6 +50,7 @@ void TerrainGen::generate(
 		int x, elevation, y;
 	};
 	vector<Flat3x3s> flatZones;
+	vector<vector<bool>> isFlat(widthx2, vector<bool>(heightx2, false));
 
 	//
 	// Hydrology Path System
@@ -78,9 +80,11 @@ void TerrainGen::generate(
 	// Raw Noise -> Stored for possible random value use
 	vector<vector<float>> rawNoise(width, vector<float>(height, 0));
 	// Data Grid -> Simply an Elevation Map double the size of our Render Grid
-	vector<vector<int>> elevationMap(width * 2, vector<int>(height * 2, 0));
+	vector<vector<int>> heightMap(width * 2, vector<int>(height * 2, 0));
 	// Render Grid -> Real size grid with final tile type values
 	vector<vector<TileType>> tileMap(width, vector<TileType>(height, GROUND));
+	// Render Grid's Elevation Values -> Real size grid with elevation ints
+	vector<vector<int>> elevationMap(width, vector<int>(height, 0));
 
 	/*****************************************************
 
@@ -109,7 +113,7 @@ void TerrainGen::generate(
 			rawNoise[x][y] = currentNoise;
 			// Normalize and scale noise to [0, elevationMax]
 			float normalizedNoise = (currentNoise + 1.0f) / 2.0f;
-			elevationMap[x][y] = round(normalizedNoise * elevationMax);
+			heightMap[x][y] = round(normalizedNoise * elevationMax);
 		}
 	}
 
@@ -128,7 +132,7 @@ void TerrainGen::generate(
 			int sampleX = x * blockSize;
 			int sampleY = y * blockSize;
 
-			lowResMap[x][y] = elevationMap[sampleX][sampleY];
+			lowResMap[x][y] = heightMap[sampleX][sampleY];
 		}
 	}
 
@@ -150,9 +154,9 @@ void TerrainGen::generate(
 
 			float randomFactor = (float)rand() / RAND_MAX;
 			if (elevationValue == 0 && randomFactor < waterRemoval) { // Chance to turn Water to Ground
-				elevationMap[x][y] = 1;
+				heightMap[x][y] = 1;
 			} else {
-				elevationMap[x][y] = elevationValue;
+				heightMap[x][y] = elevationValue;
 			}
 		}
 	}
@@ -166,7 +170,7 @@ void TerrainGen::generate(
 	*****************************************************/
 
 	//
-	// Phase One : Locate Natural 3x3 chunks
+	// Phase One : Locate Natural 3x3 chunks (really 4x4)
 	//
 	int openAreaCount = 0;
 
@@ -179,61 +183,105 @@ void TerrainGen::generate(
 
 		// Locate natural 3x3 Flat Ground Areas
 		if (FlatChunks3x3 != -1) {
-			int total3x3 = 0;
-			// Start at 1,1 due to neighbor checks
-			// Go over chunks, not every cell
+			// n6 is our center cell
+			// +-----+-----+-----+-----+
+			// | n1  | n2  | n3  | n4  |
+			// +-----+-----+-----+-----+
+			// | n5  | n6  | n7  | n8  |
+			// +-----+-----+-----+-----+
+			// | n9  | n10 | n11 | n12 |
+			// +-----+-----+-----+-----+
+			// | n13 | n14 | n15 | n16 |
+			// +-----+-----+-----+-----+
 			for (int x = 1; x < widthx2 - 4; x += 4) {
 				for (int y = 1; y < heightx2 - 4; y += 4) {
-					// n6 is our center cell
-					// +----+----+----+----+
-					// | n1 | n2 | n3 | n4 |
-					// +----+----+----+----+
-					// | n5 | n6 | n7 | n8 |
-					// +----+----+----+----+
-					// | n9 | n10 | n11 | n12 |
-					// +----+----+----+----+
-					// | n13 | n14 | n15 | n16 |
-					// +----+----+----+----+
-					int n6 = elevationMap[x][y];
-					bool eqN1 = n6 == elevationMap[x - 1][y - 1];
-					bool eqN2 = n6 == elevationMap[x][y - 1];
-					bool eqN3 = n6 == elevationMap[x + 1][y - 1];
-					bool eqN4 = n6 == elevationMap[x + 2][y - 1];
-					bool eqN5 = n6 == elevationMap[x - 1][y];
-					bool eqN7 = n6 == elevationMap[x + 1][y];
-					bool eqN8 = n6 == elevationMap[x + 2][y];
-					bool eqN9 = n6 == elevationMap[x - 1][y + 1];
-					bool eqN10 = n6 == elevationMap[x][y + 1];
-					bool eqN11 = n6 == elevationMap[x + 1][y + 1];
-					bool eqN12 = n6 == elevationMap[x + 2][y + 1];
-					bool eqN13 = n6 == elevationMap[x - 1][y + 2];
-					bool eqN14 = n6 == elevationMap[x][y + 2];
-					bool eqN15 = n6 == elevationMap[x + 1][y + 2];
-					bool eqN16 = n6 == elevationMap[x + 2][y + 2];
-
-					if (eqN1 && eqN2 && eqN3 && eqN4 && eqN5 && eqN7 && eqN8 &&
-							eqN9 && eqN10 && eqN11 && eqN12 && eqN13 && eqN14 && eqN15 && eqN16) {
-						total3x3 += 1;
+					int n6 = heightMap[x][y];
+					bool allEqual = true;
+					for (int dx = -1; dx <= 2 && allEqual; ++dx) {
+						for (int dy = -1; dy <= 2; ++dy) {
+							if (heightMap[x + dx][y + dy] != n6) {
+								allEqual = false;
+								break;
+							}
+						}
+					}
+					if (allEqual) {
+						FlatChunks3x3 += 1;
 						openAreaCount += 1;
-						if (flatZones.size() >= openAreaMin)
+						flatZones.push_back({ x, n6, y });
+						for (int dx = -1; dx <= 2; ++dx) {
+							for (int dy = -1; dy <= 2; ++dy) {
+								isFlat[x + dx][y + dy] = true;
+							}
+						}
+						if (FlatChunks3x3 >= openAreaMin)
 							break;
 					}
 				}
 			}
 
 			// If None, deny entry back into if statement
-			if (total3x3 == 0) {
+			if (FlatChunks3x3 == 0)
 				FlatChunks3x3 = -1;
-			}
 		}
 
-		// TODO
-		// Phase Two : Find 2x2's and Expand
+		if (openAreaCount >= openAreaMin)
+			break;
+
+		//
+		// Phase Two : Expand using Cellular Automata
 		//
 
-		// TODO
-		// Phase Three : Expand Single Cell's if openAreaMin still not satisfied
+		// CA Rule: If 5+ neighbors are flat, become flat
+		for (int iter = 0; iter < 3; ++iter) {
+			vector<vector<bool>> nextFlat = isFlat;
+
+			for (int x = 1; x < widthx2 - 1; ++x) {
+				for (int y = 1; y < heightx2 - 1; ++y) {
+					int count = 0;
+					for (int dx = -1; dx <= 1; ++dx) {
+						for (int dy = -1; dy <= 1; ++dy) {
+							if (dx == 0 && dy == 0)
+								continue;
+							if (isFlat[x + dx][y + dy])
+								count++;
+						}
+					}
+
+					if (count >= 5) {
+						nextFlat[x][y] = true;
+						heightMap[x][y] = heightMap[x][y]; // Optional: flatten to neighbor elevation
+					}
+				}
+			}
+
+			isFlat = nextFlat;
+		}
+
 		//
+		// Phase Three : Scan for new Flat Zones
+		//
+
+		for (int x = 1; x < widthx2 - 4; x += 4) {
+			for (int y = 1; y < heightx2 - 4; y += 4) {
+				bool allFlat = true;
+
+				for (int dx = 0; dx < 4 && allFlat; ++dx) {
+					for (int dy = 0; dy < 4; ++dy) {
+						if (!isFlat[x + dx][y + dy]) {
+							allFlat = false;
+							break;
+						}
+					}
+				}
+
+				if (allFlat) {
+					openAreaCount++;
+				} // center of 4×4 block
+				if (flatZones.size() >= openAreaMin)
+					break;
+			}
+		}
 	}
 
 	/*****************************************************
@@ -397,6 +445,65 @@ void TerrainGen::generate(
 	//		If the majority of cells in a 2x2 are marked walkable,
 	//		ensure elevation map's neighbors are equal value
 	//
+	//		NOTICE : HeightMap.size() == elevationMap.size() * 2;
+
+	for (int x = 1; x < widthx2 - 2; ++x) {
+		for (int y = 1; y < heightx2 - 2; ++y) {
+			// Check 2x2 block
+			bool w1 = walkableMap[x][y];
+			bool w2 = walkableMap[x][y + 1];
+			bool w3 = walkableMap[x + 1][y];
+			bool w4 = walkableMap[x + 1][y + 1];
+
+			int walkableCount = w1 + w2 + w3 + w4;
+
+			if (walkableCount >= 3) {
+				// Majority walkable — flatten elevation
+				float avgElevation =
+						(heightMap[x][y] +
+								heightMap[x][y + 1] +
+								heightMap[x + 1][y] +
+								heightMap[x + 1][y + 1]) /
+						4.0f;
+
+				heightMap[x][y] = avgElevation;
+				heightMap[x][y + 1] = avgElevation;
+				heightMap[x + 1][y] = avgElevation;
+				heightMap[x + 1][y + 1] = avgElevation;
+			}
+		}
+	}
+
+	// Option B : Weighted Smoothing of Walkable Area's
+	// for (int x = 1; x < widthx2 - 2; ++x) {
+	// 	for (int y = 1; y < heightx2 - 2; ++y) {
+	// 		// Check 2x2 block
+	// 		bool w00 = walkableMap[x][y];
+	// 		bool w01 = walkableMap[x][y + 1];
+	// 		bool w10 = walkableMap[x + 1][y];
+	// 		bool w11 = walkableMap[x + 1][y + 1];
+
+	// 		int walkableCount = w00 + w01 + w10 + w11;
+
+	// 		if (walkableCount >= 3) {
+	// 			// Majority walkable — smooth elevation
+	// 			float avgElevation =
+	// 					(heightMap[x][y] +
+	// 							heightMap[x][y + 1] +
+	// 							heightMap[x + 1][y] +
+	// 							heightMap[x + 1][y + 1]) /
+	// 					4.0f;
+
+	// 			// Blend each cell toward the average
+	// 			float blendFactor = 0.5f; // 0.0 = no change, 1.0 = full overwrite
+
+	// 			heightMap[x][y] = heightMap[x][y] * (1.0f - blendFactor) + avgElevation * blendFactor;
+	// 			heightMap[x][y + 1] = heightMap[x][y + 1] * (1.0f - blendFactor) + avgElevation * blendFactor;
+	// 			heightMap[x + 1][y] = heightMap[x + 1][y] * (1.0f - blendFactor) + avgElevation * blendFactor;
+	// 			heightMap[x + 1][y + 1] = heightMap[x + 1][y + 1] * (1.0f - blendFactor) + avgElevation * blendFactor;
+	// 		}
+	// 	}
+	// }
 
 	/*****************************************************
 
@@ -421,10 +528,10 @@ void TerrainGen::generate(
 			// +----+----+
 			//
 			// Get the surrounding DataGrid Neighbors overlap of the Render Grid
-			int n1 = elevationMap[y][x];
-			int n2 = elevationMap[y][x + 1];
-			int n3 = elevationMap[y + 1][x];
-			int n4 = elevationMap[y + 1][x + 1];
+			int n1 = heightMap[y][x];
+			int n2 = heightMap[y][x + 1];
+			int n3 = heightMap[y + 1][x];
+			int n4 = heightMap[y + 1][x + 1];
 
 			// Determine the Elevation Value
 			//
@@ -571,7 +678,10 @@ void TerrainGen::generate(
 			// Cliff's & Ramp's Corner
 			//-------------------------//
 
-			//TODO : Decide how cliffs vs ramps are picked
+			random_device rd;
+			mt19937 gen(rd());
+			uniform_real_distribution<float> dist(0.0f, 1.0f);
+			float getRandom = dist(gen);
 
 			// Corner North
 			// +----+----+  +---+---+
@@ -580,9 +690,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 1 | 2 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n4 > n1 && n4 > n2 && n4 > n3) {
-				tileMap[x][y] = CLIFF_CORNER;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF_CORNER;
+				} else {
+					tileMap[x][y] = RAMP_CORNER;
+				}
 				tilesRotation = NORTH;
 			}
 			// Corner South
@@ -592,9 +706,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 1 | 1 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n1 > n3 && n1 > n4) {
-				tileMap[x][y] = CLIFF_CORNER;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF_CORNER;
+				} else {
+					tileMap[x][y] = RAMP_CORNER;
+				}
 				tilesRotation = SOUTH;
 			}
 			// Corner East
@@ -604,9 +722,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 1 | 1 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n2 > n1 && n2 > n3 && n2 > n4) {
-				tileMap[x][y] = CLIFF_CORNER;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF_CORNER;
+				} else {
+					tileMap[x][y] = RAMP_CORNER;
+				}
 				tilesRotation = EAST;
 			}
 			// Corner East
@@ -616,9 +738,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 1 | 0 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n3 > n1 && n3 > n2 && n3 > n4) {
-				tileMap[x][y] = CLIFF_CORNER;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF_CORNER;
+				} else {
+					tileMap[x][y] = RAMP_CORNER;
+				}
 				tilesRotation = WEST;
 			}
 
@@ -633,9 +759,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 2 | 2 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 < n3 && n1 < n4 && n2 < n4 && n2 < n3) {
-				tileMap[x][y] = CLIFF;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF;
+				} else {
+					tileMap[x][y] = RAMP;
+				}
 				tilesRotation = NORTH;
 			}
 			// Cliff's Edge South
@@ -645,9 +775,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 1 | 1 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n3 && n1 > n4 && n2 > n4 && n2 > n3) {
-				tileMap[x][y] = CLIFF;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF;
+				} else {
+					tileMap[x][y] = RAMP;
+				}
 				tilesRotation = SOUTH;
 			}
 			// Cliff's Edge East
@@ -657,9 +791,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 2 | 1 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 < n2 && n1 < n4 && n3 < n2 && n3 < n4) {
-				tileMap[x][y] = CLIFF;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF;
+				} else {
+					tileMap[x][y] = RAMP;
+				}
 				tilesRotation = EAST;
 			}
 			// Cliff's Edge West
@@ -669,9 +807,13 @@ void TerrainGen::generate(
 			// | n3 | n4 |  | 1 | 2 |
 			// +----+----+  +---+---+
 			//
-			// TODO : Determine the way of choosing between cliffs and ramps
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n1 > n4 && n3 > n2 && n3 > n4) {
-				tileMap[x][y] = CLIFF;
+				// If Not-Walkable, Valid Cliff
+				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+					tileMap[x][y] = CLIFF;
+				} else {
+					tileMap[x][y] = RAMP;
+				}
 				tilesRotation = WEST;
 			}
 
@@ -680,10 +822,20 @@ void TerrainGen::generate(
 				Grid Map Cell Setter
 
 			*****************************************************/
-
+			elevationMap[x][y] = elevation;
 			myGridMap->set_cell_item(Vector3i(x, elevation, y), tileMap[x][y], tilesRotation);
 		}
 	}
+
+	/*****************************************************
+
+		Sanitizer
+
+			Ensure Cliffs & Ramps aren't weirdly scattered
+			by running a sanitizer that smooths out
+			cliffs & ramps
+
+	*****************************************************/
 
 	/*****************************************************
 
@@ -693,6 +845,8 @@ void TerrainGen::generate(
 			Used for placing Large Structures
 
 	*****************************************************/
+	// Empty FlatZones
+	flatZones.clear();
 
 	for (int i = 0; i <= width - 3; i += 3) {
 		for (int j = 0; j <= height - 3; j += 3) {
@@ -725,8 +879,23 @@ void TerrainGen::generate(
 			TBD
 
 	*****************************************************/
+
+	//TODO : Use Walkable map to find non-walkable area's as placeable area's
+	//TODO : Use Cliffs & Ramp's Placement as non-placeable area's
+
+	/*****************************************************
+
+		Return's
+
+			TBD
+
+	*****************************************************/
+
+	//TODO : Return data needed for object placement's
+	//TODO : Return flatZones/openArea's
+	//TODO : Return poisson disk sampling results
 }
 
 void TerrainGen::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "noiseType", "waterRemoval", "noiseFreq"), &TerrainGen::generate);
+	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "noiseType", "waterRemoval", "rampPercentage", "noiseFreq"), &TerrainGen::generate);
 }

@@ -19,4 +19,4 @@ func _ready():
 	#generate(grid_map, 128, 128, 4, seed_value, 12, NoiseType.VALUE, 0.79, 0.1);
 
 	# Simplex Noise Based
-	generate(grid_map, 128, 128, 4, seed_value, 12, NoiseType.SIMPLEX, 0.3, 0.02);
+	generate(grid_map, 128, 128, 4, seed_value, 12, NoiseType.SIMPLEX, 0.3, 0.5, 0.02);

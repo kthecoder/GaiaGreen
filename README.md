@@ -60,9 +60,10 @@ gdb --version
 5. Cellular Automata (CA) Filter on Noise
 
    1. CA Filter A : Expanding Zones
-      1. Using Flood Fill, find X number of `openAreaMin`, find flat zones that are minimum of 2x2 cells of flat area
+      1. Find X number of `openAreaMin`, find flat zones that are 3x3 cells of flat area
       2. Smooth the noise by expanding the flat areas
-      3. Create a CA rule that defines flattened areas and expand them
+         1. Create a CA rule that defines flattened areas and expand them
+      3. Scan to find new flat zones
    1. CA Filter B : Patching / Removing Outliers
       1. Even out zero elevation && any cells that are islands
       2. If a cell is zero and has many zero neighbors, it stays zero. Also true for values of 1, 2, 3, etc. If a cell is x and has many x neighbors it stays x.
@@ -92,20 +93,25 @@ gdb --version
       1. Determine the correct tile type for each cell in the grid
    2. Set the Grid map cells using Godot's Grid map system
 
-8. Open Area Finder / Large Structure Locations
+8. Sanitizer
+
+   1. Smooth out Cliffs & Ramps
+   2. Ensure cliffs and ramps don't look messy
+
+9. Open Area Finder / Large Structure Locations
 
    1. Find areas that have flat ground tiles of 3x3 cells
    2. Elevation buffer, ensure structures aren’t placed against cliffs and ramps
    3. Store the center cell into a list of available locations
 
-9. Poisson Object Placement
+10. Poisson Object Placement
 
-   1. Create a copy of the finalized grid and increase its size by splitting cells into 4 pieces
-   2. Finalized grid contains data about each cell's place-ability
-      1. Use the data from the previous steps to know cells that can’t have objects placed on them
-      2. River Pathing determines non-placeable cells
-      3. Elevation changes are non-placeable cell's
-   3. Use poisson disk sampling to place non-large objects using the higher density grid
+    1. Create a copy of the finalized grid and increase its size by splitting cells into 4 pieces
+    2. Finalized grid contains data about each cell's place-ability
+       1. Use the data from the previous steps to know cells that can’t have objects placed on them
+       2. River Pathing determines non-placeable cells
+       3. Elevation changes are non-placeable cell's
+    3. Use poisson disk sampling to place non-large objects using the higher density grid
 
 ## Contributing
 
