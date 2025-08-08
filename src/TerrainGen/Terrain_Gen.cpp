@@ -9,7 +9,7 @@ TerrainGen::TerrainGen() {
 TerrainGen::~TerrainGen() {
 }
 
-void TerrainGen::generate(
+Dictionary TerrainGen::generate(
 		GridMap *myGridMap,
 		int height,
 		int width,
@@ -18,16 +18,15 @@ void TerrainGen::generate(
 		int openAreaMin,
 		int noiseType,
 		double waterRemoval,
-		float rampPercentage,
+		float cliffThreshold,
 		float noiseFreq) {
 	/*****************************************************
 
 		Setup
 
 	*****************************************************/
-
-	// int dx[4] = { 1, -1, 0, 0 };
-	// int dy[4] = { 0, 0, 1, -1 };
+	int dx[4] = { 1, -1, 0, 0 };
+	int dy[4] = { 0, 0, 1, -1 };
 
 	//	Dual Grid System Setup
 	//
@@ -70,6 +69,16 @@ void TerrainGen::generate(
 	vector<vector<bool>> walkableMap(widthx2, vector<bool>(heightx2, true)); // Default: walkable
 
 	//
+	// Poisson Disk Sampling
+	//
+
+	struct Point {
+		int x, y;
+	};
+
+	vector<Point> poissonSamples;
+
+	//
 	// Management Grids
 	//
 	//		Track: Low Res Map, Raw Noise, Elevation Map, Render Grid Tile Type
@@ -85,6 +94,8 @@ void TerrainGen::generate(
 	vector<vector<TileType>> tileMap(width, vector<TileType>(height, GROUND));
 	// Render Grid's Elevation Values -> Real size grid with elevation ints
 	vector<vector<int>> elevationMap(width, vector<int>(height, 0));
+	// Each cell represents a quarter of the original tile
+	vector<vector<bool>> placeableMap(widthx2, vector<bool>(heightx2, true));
 
 	/*****************************************************
 
@@ -291,6 +302,90 @@ void TerrainGen::generate(
 			Patching / Removing Outliers
 
 	*****************************************************/
+	int neighborRadius = 1; // 3x3 neighborhood
+	int threshold = 5; // Rule 2: minimum matching neighbors to preserve center
+	int iterations = 3; // Number of CA generations to apply (default: 1)
+
+	vector<vector<int>> curr = heightMap;
+	vector<vector<int>> next = heightMap;
+
+	for (int it = 0; it < iterations; ++it) {
+		bool anyChanged = false;
+
+		for (int x = 0; x < widthx2; ++x) {
+			for (int y = 0; y < heightx2; ++y) {
+				const int center = curr[x][y];
+
+				// Count neighbors matching the center value
+				int matchCount = 0;
+				for (int dx = -neighborRadius; dx <= neighborRadius; ++dx) {
+					for (int dy = -neighborRadius; dy <= neighborRadius; ++dy) {
+						if (dx == 0 && dy == 0)
+							continue;
+						int nx = x + dx, ny = y + dy;
+						if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
+							continue;
+						if (curr[nx][ny] == center)
+							++matchCount;
+					}
+				}
+
+				// Default: preserve current value
+				int newVal = center;
+
+				// Rule 2: If not enough matching neighbors, resolve via dominant neighbor value
+				if (matchCount < threshold) {
+					// Frequency table over bounded elevation range [0..elevationMax]
+					vector<int> freq(elevationMax + 1, 0);
+
+					// Count frequency of each neighbor value
+					for (int dx = -neighborRadius; dx <= neighborRadius; ++dx) {
+						for (int dy = -neighborRadius; dy <= neighborRadius; ++dy) {
+							if (dx == 0 && dy == 0)
+								continue;
+							int nx = x + dx, ny = y + dy;
+							if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
+								continue;
+							++freq[curr[nx][ny]];
+						}
+					}
+
+					// Find dominant neighbor value
+					int dominantVal = center;
+					int maxCount = 0;
+					for (int val = 0; val <= elevationMax; ++val) {
+						if (freq[val] > maxCount) {
+							maxCount = freq[val];
+							dominantVal = val;
+						}
+					}
+
+					// Rule 4: If center is isolated (few dominant neighbors), grow toward dominant
+					if (maxCount <= 2) {
+						newVal = min(dominantVal + 1, elevationMax);
+					}
+					// Rule 3: Otherwise, conform to dominant neighbor value
+					else {
+						newVal = dominantVal;
+					}
+				}
+
+				next[x][y] = newVal;
+				if (newVal != center)
+					anyChanged = true;
+			}
+		}
+
+		// Advance generation via double-buffering
+		curr.swap(next);
+
+		// Optional early exit if stable
+		if (!anyChanged)
+			break;
+	}
+
+	// Write back the final state
+	heightMap = move(curr);
 
 	/*****************************************************
 
@@ -299,6 +394,85 @@ void TerrainGen::generate(
 			Water Reduction
 
 	*****************************************************/
+
+	if (waterRemoval >= 10.0f) {
+		// Clamp percentage
+		if (waterRemoval > 100.0f)
+			waterRemoval = 100.0f;
+		if (waterRemoval < 0.0f)
+			waterRemoval = 0.0f;
+
+		vector<vector<bool>> visited(heightx2, vector<bool>(widthx2, false));
+
+		for (int y = 0; y < heightx2; y++) {
+			for (int x = 0; x < widthx2; x++) {
+				if (heightMap[y][x] != 0 || visited[y][x])
+					continue;
+
+				// Manual stack flood fill
+				vector<pair<int, int>> stack;
+				vector<pair<int, int>> region;
+				stack.push_back(make_pair(x, y));
+				visited[y][x] = true;
+
+				while (!stack.empty()) {
+					pair<int, int> current = stack.back();
+					stack.pop_back();
+					int cx = current.first;
+					int cy = current.second;
+					region.push_back(current);
+
+					for (int d = 0; d < 4; d++) {
+						int nx = cx + dx[d];
+						int ny = cy + dy[d];
+						if (nx < 0 || ny < 0 || nx >= widthx2 || ny >= heightx2)
+							continue;
+						if (visited[ny][nx])
+							continue;
+						if (heightMap[ny][nx] != 0)
+							continue;
+						visited[ny][nx] = true;
+						stack.push_back(make_pair(nx, ny));
+					}
+				}
+
+				// Determine how many cells to flip
+				int regionSize = region.size();
+				int toFlip = (int)(regionSize * (waterRemoval / 100.0f));
+				if (toFlip <= 0)
+					continue;
+
+				// Rank by proximity to edge
+				vector<pair<int, pair<int, int>>> candidates;
+				for (int i = 0; i < regionSize; i++) {
+					int rx = region[i].first;
+					int ry = region[i].second;
+					int distX = min(rx, widthx2 - 1 - rx);
+					int distY = min(ry, heightx2 - 1 - ry);
+					int edgeDist = min(distX, distY);
+					candidates.push_back(make_pair(edgeDist, region[i]));
+				}
+
+				// Bubble sort
+				for (int i = 0; i < (int)candidates.size(); i++) {
+					for (int j = i + 1; j < (int)candidates.size(); j++) {
+						if (candidates[j].first < candidates[i].first) {
+							pair<int, pair<int, int>> temp = candidates[i];
+							candidates[i] = candidates[j];
+							candidates[j] = temp;
+						}
+					}
+				}
+
+				// Flip top N water cells to land
+				for (int i = 0; i < toFlip && i < (int)candidates.size(); i++) {
+					int fx = candidates[i].second.first;
+					int fy = candidates[i].second.second;
+					heightMap[fy][fx] = 1;
+				}
+			}
+		}
+	}
 
 	/*****************************************************
 
@@ -540,6 +714,23 @@ void TerrainGen::generate(
 			//
 			int elevation = max({ n1, n2, n3, n4 });
 
+			// Determine the Slope from Raw Noise
+			//
+			//	Use slope to determine Cliffs & Ramps
+			//	relying on the raw noise as a decider
+			//	for natural ramps and slopes
+			//
+
+			float r1 = rawNoise[x][y];
+			float r2 = rawNoise[x + 1][y];
+			float r3 = rawNoise[x][y + 1];
+			float r4 = rawNoise[x + 1][y + 1];
+
+			float slopeX = fabs(r2 - r1) + fabs(r4 - r3);
+			float slopeY = fabs(r3 - r1) + fabs(r4 - r2);
+			float totalSlope = slopeX + slopeY;
+			float slope = totalSlope / 4.0f; // Normalize to 0 to 1
+
 			// Determine Elevation Changes & Rotations & Tile Choice
 			//
 			// 	Elevation change needs to be known in Left, Right, Up, & Down
@@ -678,11 +869,6 @@ void TerrainGen::generate(
 			// Cliff's & Ramp's Corner
 			//-------------------------//
 
-			random_device rd;
-			mt19937 gen(rd());
-			uniform_real_distribution<float> dist(0.0f, 1.0f);
-			float getRandom = dist(gen);
-
 			// Corner North
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
@@ -692,7 +878,7 @@ void TerrainGen::generate(
 			//
 			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n4 > n1 && n4 > n2 && n4 > n3) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
@@ -708,7 +894,7 @@ void TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n1 > n3 && n1 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
@@ -724,7 +910,7 @@ void TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n2 > n1 && n2 > n3 && n2 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
@@ -740,7 +926,7 @@ void TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n3 > n1 && n3 > n2 && n3 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
@@ -761,7 +947,7 @@ void TerrainGen::generate(
 			//
 			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 < n3 && n1 < n4 && n2 < n4 && n2 < n3) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
@@ -777,7 +963,7 @@ void TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n3 && n1 > n4 && n2 > n4 && n2 > n3) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
@@ -793,7 +979,7 @@ void TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 < n2 && n1 < n4 && n3 < n2 && n3 < n4) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
@@ -809,7 +995,7 @@ void TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n1 > n4 && n3 > n2 && n3 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (getRandom > rampPercentage || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || !walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
@@ -826,16 +1012,6 @@ void TerrainGen::generate(
 			myGridMap->set_cell_item(Vector3i(x, elevation, y), tileMap[x][y], tilesRotation);
 		}
 	}
-
-	/*****************************************************
-
-		Sanitizer
-
-			Ensure Cliffs & Ramps aren't weirdly scattered
-			by running a sanitizer that smooths out
-			cliffs & ramps
-
-	*****************************************************/
 
 	/*****************************************************
 
@@ -876,26 +1052,108 @@ void TerrainGen::generate(
 
 		Poisson Object Placement
 
-			TBD
+			Use Walkable map to find non-walkable area's as placeable area's
+			Use Cliffs & Ramp's Placement as non-placeable area's
 
 	*****************************************************/
 
-	//TODO : Use Walkable map to find non-walkable area's as placeable area's
-	//TODO : Use Cliffs & Ramp's Placement as non-placeable area's
+	// Generate Placeable Area's
+
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			bool isNonWalkable = !walkableMap[x][y];
+			bool isNotCliffOrRamp = tileMap[x][y] != TileType::CLIFF &&
+					tileMap[x][y] != TileType::RAMP &&
+					tileMap[x][y] != TileType::CLIFF_CORNER &&
+					tileMap[x][y] != TileType::RAMP_CORNER;
+
+			// Only mark subcells as placeable if both conditions are true
+			bool isPlaceable = isNonWalkable && isNotCliffOrRamp;
+
+			placeableMap[x * 2][y * 2] = isPlaceable;
+			placeableMap[x * 2 + 1][y * 2] = isPlaceable;
+			placeableMap[x * 2][y * 2 + 1] = isPlaceable;
+			placeableMap[x * 2 + 1][y * 2 + 1] = isPlaceable;
+		}
+	}
+
+	// Poisson Disk Sampling
+
+	float minDistance = 3.0f; // Minimum spacing between objects
+
+	for (int x = 0; x < widthx2; x++) {
+		for (int y = 0; y < heightx2; y++) {
+			if (!placeableMap[x][y])
+				continue;
+
+			bool tooClose = false;
+			for (const Point &p : poissonSamples) {
+				float dx = p.x - x;
+				float dy = p.y - y;
+				if (sqrt(dx * dx + dy * dy) < minDistance) {
+					tooClose = true;
+					break;
+				}
+			}
+
+			if (!tooClose) {
+				poissonSamples.push_back({ x, y });
+			}
+		}
+	}
 
 	/*****************************************************
 
 		Return's
 
-			TBD
+			Return a dictionary of values needed for object
+			placement
+
+			Return : Elevation Map
+				Necessary for height of objects
+
+			Return : Flat Zones
+				Necessary for placing large stuctures
+
+			Return : Poisson Points
 
 	*****************************************************/
 
 	//TODO : Return data needed for object placement's
 	//TODO : Return flatZones/openArea's
 	//TODO : Return poisson disk sampling results
+
+	Dictionary result;
+
+	// Convert poissonSamples → Array<Vector3i>
+	Array poissonPoints;
+	for (const Point &p : poissonSamples) {
+		int elevation = elevationMap[p.x][p.y]; // Assuming elevationMap is [width][height]
+		poissonPoints.push_back(Vector3i(p.x, elevation, p.y));
+	}
+	result["poissonPoints"] = poissonPoints;
+
+	// Convert flatZones → Array<Dictionary>
+	Array flatZonePoints;
+	for (const Flat3x3s &zone : flatZones) {
+		flatZonePoints.push_back(Vector3i(zone.x, zone.elevation, zone.y));
+	}
+	result["flatZonePoints"] = flatZonePoints;
+
+	// Convert elevationMap → Array<Array<int>>
+	Array elevationArray;
+	for (const auto &row : elevationMap) {
+		Array inner;
+		for (int val : row) {
+			inner.push_back(val);
+		}
+		elevationArray.push_back(inner);
+	}
+	result["elevationMap"] = elevationArray;
+
+	return result;
 }
 
 void TerrainGen::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "noiseType", "waterRemoval", "rampPercentage", "noiseFreq"), &TerrainGen::generate);
+	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
 }

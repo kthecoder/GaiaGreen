@@ -93,25 +93,27 @@ gdb --version
       1. Determine the correct tile type for each cell in the grid
    2. Set the Grid map cells using Godot's Grid map system
 
-8. Sanitizer
-
-   1. Smooth out Cliffs & Ramps
-   2. Ensure cliffs and ramps don't look messy
-
-9. Open Area Finder / Large Structure Locations
+8. Open Area Finder / Large Structure Locations
 
    1. Find areas that have flat ground tiles of 3x3 cells
    2. Elevation buffer, ensure structures aren’t placed against cliffs and ramps
    3. Store the center cell into a list of available locations
 
-10. Poisson Object Placement
+9. Poisson Object Placement
 
-    1. Create a copy of the finalized grid and increase its size by splitting cells into 4 pieces
-    2. Finalized grid contains data about each cell's place-ability
-       1. Use the data from the previous steps to know cells that can’t have objects placed on them
-       2. River Pathing determines non-placeable cells
-       3. Elevation changes are non-placeable cell's
-    3. Use poisson disk sampling to place non-large objects using the higher density grid
+   1. Create a copy of the finalized grid (tileMap) and increase its size by splitting cells into 4 pieces
+   2. New grid contains data about each cell's (4x4 area) place-ability
+
+      1. Use the data from the previous steps to know cells that can’t have objects placed on them
+
+         1. `vector<vector<bool>> walkableMap` size gridx2
+            1. This is Hydrology Pathing which determines non-placeable cells
+            1. Find non-walkable area's as object placeable area's
+         1. `vector<vector<TileType>> tileMap` size grid
+            1. Use Cliffs & Ramp's Placement as object non-placeable area's
+
+   3. Generate a list of placeable points on the grid using poisson disk sampling
+      1. If a cell is a valid place for object placement, turn all four cells in the new grid to true/valid
 
 ## Contributing
 

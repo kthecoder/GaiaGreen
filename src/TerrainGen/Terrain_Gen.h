@@ -50,7 +50,7 @@ public:
 
 	//Generate Terrain
 	//Takes in a height & width for size of map on the X & Z axis
-	void generate(
+	Dictionary generate(
 			GridMap *myGridMap,
 			int height,
 			int width,
@@ -59,7 +59,7 @@ public:
 			int openAreaMin,
 			int noiseType,
 			double waterRemoval,
-			float rampPercentage = 0.5,
+			float cliffThreshold = 0.2,
 			float noiseFreq = 0.005);
 };
 
