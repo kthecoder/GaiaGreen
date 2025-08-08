@@ -39,10 +39,3 @@ func _ready():
 	var poisson_points: Array = result["poissonPoints"]
 	for point in poisson_points:
 		print("Poisson sample at: ", point)
-
-	# Access 3D flat zone points
-	var flat_zone_points_3d: Array = result["flatZonePoints3D"]
-	for point in flat_zone_points_3d:
-		print("Flat zone 3D point: ", point)
-
-	
