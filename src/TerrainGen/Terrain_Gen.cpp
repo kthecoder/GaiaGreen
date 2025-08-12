@@ -32,6 +32,7 @@ Dictionary TerrainGen::generate(
 	//
 	// 	  Produce a 2x Grid for the Data Grid
 	//
+	//TODO Ensure Width & Height are divisable by BlockSize / Error Catching
 	int widthx2 = width * 2;
 	int heightx2 = height * 2;
 
@@ -87,7 +88,7 @@ Dictionary TerrainGen::generate(
 	// Stores the Lower Resolution map for Noise Conversion
 	vector<vector<int>> lowResMap(reducedX, vector<int>(reducedY, 0));
 	// Raw Noise -> Stored for possible random value use
-	vector<vector<float>> rawNoise(width, vector<float>(height, 0));
+	vector<vector<float>> rawNoise(widthx2, vector<float>(heightx2, 0));
 	// Data Grid -> Simply an Elevation Map double the size of our Render Grid
 	vector<vector<int>> heightMap(width * 2, vector<int>(height * 2, 0));
 	// Render Grid -> Real size grid with final tile type values
@@ -294,20 +295,25 @@ Dictionary TerrainGen::generate(
 			}
 		}
 	}
-
 	/*****************************************************
 
-		Cellular Automata Filter B
+			Cellular Automata Filter B
 
-			Patching / Removing Outliers
+				Patching / Removing Outliers
+				(Cardinal Neighbors Only)
 
 	*****************************************************/
-	int neighborRadius = 1; // 3x3 neighborhood
-	int threshold = 5; // Rule 2: minimum matching neighbors to preserve center
-	int iterations = 3; // Number of CA generations to apply (default: 1)
+	int neighborRadius = 1; // 3x3 neighborhood (cardinal only)
+	int threshold = 2; // Minimum matching neighbors to preserve center
+	int iterations = 1; // Number of CA generations to apply
 
 	vector<vector<int>> curr = heightMap;
 	vector<vector<int>> next = heightMap;
+
+	// Cardinal directions: N, S, E, W
+	const vector<pair<int, int>> cardinalDirs = {
+		{ 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 }
+	};
 
 	for (int it = 0; it < iterations; ++it) {
 		bool anyChanged = false;
@@ -318,16 +324,12 @@ Dictionary TerrainGen::generate(
 
 				// Count neighbors matching the center value
 				int matchCount = 0;
-				for (int dx = -neighborRadius; dx <= neighborRadius; ++dx) {
-					for (int dy = -neighborRadius; dy <= neighborRadius; ++dy) {
-						if (dx == 0 && dy == 0)
-							continue;
-						int nx = x + dx, ny = y + dy;
-						if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
-							continue;
-						if (curr[nx][ny] == center)
-							++matchCount;
-					}
+				for (const auto &[dx, dy] : cardinalDirs) {
+					int nx = x + dx, ny = y + dy;
+					if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
+						continue;
+					if (curr[nx][ny] == center)
+						++matchCount;
 				}
 
 				// Default: preserve current value
@@ -335,21 +337,17 @@ Dictionary TerrainGen::generate(
 
 				// Rule 2: If not enough matching neighbors, resolve via dominant neighbor value
 				if (matchCount < threshold) {
-					// Frequency table over bounded elevation range [0..elevationMax]
 					vector<int> freq(elevationMax + 1, 0);
 
-					// Count frequency of each neighbor value
-					for (int dx = -neighborRadius; dx <= neighborRadius; ++dx) {
-						for (int dy = -neighborRadius; dy <= neighborRadius; ++dy) {
-							if (dx == 0 && dy == 0)
-								continue;
-							int nx = x + dx, ny = y + dy;
-							if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
-								continue;
-							++freq[curr[nx][ny]];
-						}
+					// Count frequency of each cardinal neighbor value
+					for (size_t i = 0; i < cardinalDirs.size(); ++i) {
+						int dx = cardinalDirs[i].first;
+						int dy = cardinalDirs[i].second;
+						int nx = x + dx, ny = y + dy;
+						if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
+							continue;
+						++freq[curr[nx][ny]];
 					}
-
 					// Find dominant neighbor value
 					int dominantVal = center;
 					int maxCount = 0;
@@ -361,7 +359,7 @@ Dictionary TerrainGen::generate(
 					}
 
 					// Rule 4: If center is isolated (few dominant neighbors), grow toward dominant
-					if (maxCount <= 2) {
+					if (maxCount <= 1) {
 						newVal = min(dominantVal + 1, elevationMax);
 					}
 					// Rule 3: Otherwise, conform to dominant neighbor value
@@ -376,15 +374,11 @@ Dictionary TerrainGen::generate(
 			}
 		}
 
-		// Advance generation via double-buffering
 		curr.swap(next);
-
-		// Optional early exit if stable
 		if (!anyChanged)
 			break;
 	}
 
-	// Write back the final state
 	heightMap = move(curr);
 
 	/*****************************************************
@@ -576,7 +570,7 @@ Dictionary TerrainGen::generate(
 	//		for cells with larger accumulation
 	//
 
-	int maxRiverWidth = 3; // Max number of perpendicular cells (to river flow direction) to mark
+	int maxRiverWidth = 1; // Max number of perpendicular cells (to river flow direction) to mark
 
 	for (int x = 1; x < widthx2 - 1; x++) {
 		for (int y = 1; y < heightx2 - 1; y++) {
@@ -632,52 +626,135 @@ Dictionary TerrainGen::generate(
 			int walkableCount = w1 + w2 + w3 + w4;
 
 			if (walkableCount >= 3) {
-				// Majority walkable — flatten elevation
-				float avgElevation =
-						(heightMap[x][y] +
-								heightMap[x][y + 1] +
-								heightMap[x + 1][y] +
-								heightMap[x + 1][y + 1]) /
-						4.0f;
+				vector<int> values = {
+					heightMap[x][y],
+					heightMap[x][y + 1],
+					heightMap[x + 1][y],
+					heightMap[x + 1][y + 1]
+				};
 
-				heightMap[x][y] = avgElevation;
-				heightMap[x][y + 1] = avgElevation;
-				heightMap[x + 1][y] = avgElevation;
-				heightMap[x + 1][y + 1] = avgElevation;
+				int heightMode = values[0];
+				int maxCount = 0;
+
+				for (int i = 0; i < values.size(); ++i) {
+					int count = 1;
+					for (int j = i + 1; j < values.size(); ++j)
+						if (values[j] == values[i])
+							++count;
+
+					if (count > maxCount) {
+						maxCount = count;
+						heightMode = values[i];
+					}
+				}
+
+				// Majority walkable — flatten elevation
+
+				heightMap[x][y] = heightMode;
+				heightMap[x][y + 1] = heightMode;
+				heightMap[x + 1][y] = heightMode;
+				heightMap[x + 1][y + 1] = heightMode;
 			}
 		}
 	}
 
-	// Option B : Weighted Smoothing of Walkable Area's
-	// for (int x = 1; x < widthx2 - 2; ++x) {
-	// 	for (int y = 1; y < heightx2 - 2; ++y) {
-	// 		// Check 2x2 block
-	// 		bool w00 = walkableMap[x][y];
-	// 		bool w01 = walkableMap[x][y + 1];
-	// 		bool w10 = walkableMap[x + 1][y];
-	// 		bool w11 = walkableMap[x + 1][y + 1];
+	/*****************************************************
 
-	// 		int walkableCount = w00 + w01 + w10 + w11;
+		Enforce Square Patterns
 
-	// 		if (walkableCount >= 3) {
-	// 			// Majority walkable — smooth elevation
-	// 			float avgElevation =
-	// 					(heightMap[x][y] +
-	// 							heightMap[x][y + 1] +
-	// 							heightMap[x + 1][y] +
-	// 							heightMap[x + 1][y + 1]) /
-	// 					4.0f;
+			Due to the Cellular Automata Filters, the
+			square like patterns are pushed into rounded
+			patterns.
+			Ensure the pattern returns to a square pattern
+			so that the isometric tiles are useable.
 
-	// 			// Blend each cell toward the average
-	// 			float blendFactor = 0.5f; // 0.0 = no change, 1.0 = full overwrite
+	*****************************************************/
 
-	// 			heightMap[x][y] = heightMap[x][y] * (1.0f - blendFactor) + avgElevation * blendFactor;
-	// 			heightMap[x][y + 1] = heightMap[x][y + 1] * (1.0f - blendFactor) + avgElevation * blendFactor;
-	// 			heightMap[x + 1][y] = heightMap[x + 1][y] * (1.0f - blendFactor) + avgElevation * blendFactor;
-	// 			heightMap[x + 1][y + 1] = heightMap[x + 1][y + 1] * (1.0f - blendFactor) + avgElevation * blendFactor;
-	// 		}
-	// 	}
-	// }
+	int enforcement = 2;
+
+	for (int i = 0; i < enforcement; i++) {
+		for (int x = 0; x < width - 1; x += 2) {
+			for (int y = 0; y < height - 1; y += 2) {
+				int a = heightMap[x][y];
+				int b = heightMap[x + 1][y];
+				int c = heightMap[x][y + 1];
+				int d = heightMap[x + 1][y + 1];
+
+				// If already uniform or already a clean vertical/horizontal split, do nothing.
+				bool uniform = (a == b && a == c && a == d);
+				bool vertical = (a == c && b == d && a != b);
+				bool horizontal = (a == b && c == d && a != c);
+				if (uniform || vertical || horizontal)
+					continue;
+
+				// Count frequency of each value manually
+				int countA = 0, countB = 0, countC = 0, countD = 0;
+				if (a == a)
+					countA++;
+				if (b == a)
+					countA++;
+				if (c == a)
+					countA++;
+				if (d == a)
+					countA++;
+
+				if (a != b) {
+					if (b == b)
+						countB++;
+					if (a == b)
+						countB++; // already counted
+					if (c == b)
+						countB++;
+					if (d == b)
+						countB++;
+				}
+
+				if (a != c && b != c) {
+					if (c == c)
+						countC++;
+					if (a == c)
+						countC++;
+					if (b == c)
+						countC++;
+					if (d == c)
+						countC++;
+				}
+
+				if (a != d && b != d && c != d) {
+					if (d == d)
+						countD++;
+					if (a == d)
+						countD++;
+					if (b == d)
+						countD++;
+					if (c == d)
+						countD++;
+				}
+
+				// Determine mode (most frequent value)
+				int mode = a;
+				int maxCount = countA;
+				if (countB > maxCount) {
+					mode = b;
+					maxCount = countB;
+				}
+				if (countC > maxCount) {
+					mode = c;
+					maxCount = countC;
+				}
+				if (countD > maxCount) {
+					mode = d;
+					maxCount = countD;
+				}
+
+				// Snap all four cells to the mode
+				heightMap[x][y] = mode;
+				heightMap[x + 1][y] = mode;
+				heightMap[x][y + 1] = mode;
+				heightMap[x + 1][y + 1] = mode;
+			}
+		}
+	}
 
 	/*****************************************************
 
@@ -702,10 +779,10 @@ Dictionary TerrainGen::generate(
 			// +----+----+
 			//
 			// Get the surrounding DataGrid Neighbors overlap of the Render Grid
-			int n1 = heightMap[y][x];
-			int n2 = heightMap[y][x + 1];
-			int n3 = heightMap[y + 1][x];
-			int n4 = heightMap[y + 1][x + 1];
+			int n1 = heightMap[x][y];
+			int n2 = heightMap[x + 1][y];
+			int n3 = heightMap[x][y + 1];
+			int n4 = heightMap[x + 1][y + 1];
 
 			// Determine the Elevation Value
 			//
@@ -770,7 +847,7 @@ Dictionary TerrainGen::generate(
 			// Water Edges
 			//-------------------------//
 
-			// Water's Edge South
+			// Water's Edge East
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
 			// +----+----+  +---+---+
@@ -779,9 +856,9 @@ Dictionary TerrainGen::generate(
 			//
 			if (n1 == 0 && n2 == 0 && n3 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = SOUTH;
+				tilesRotation = EAST;
 			}
-			// Water's Edge North
+			// Water's Edge West
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
 			// +----+----+  +---+---+
@@ -790,9 +867,9 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 == 0 && n4 == 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = NORTH;
+				tilesRotation = WEST;
 			}
-			// Water's Edge East
+			// Water's Edge South
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 1 |
 			// +----+----+  +---+---+
@@ -801,10 +878,10 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 == 0 && n3 == 0 && n2 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = EAST;
+				tilesRotation = SOUTH;
 
 			}
-			// Water's Edge West
+			// Water's Edge North
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 0 |
 			// +----+----+  +---+---+
@@ -813,14 +890,14 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n2 == 0 && n4 == 0 && n1 > 0 && n3 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = WEST;
+				tilesRotation = NORTH;
 			}
 
 			//-------------------------//
 			// Water Corners
 			//-------------------------//
 
-			// Water's Corner North
+			// Water's Corner West
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
 			// +----+----+  +---+---+
@@ -829,9 +906,9 @@ Dictionary TerrainGen::generate(
 			//
 			if (n1 == 0 && n2 == 0 && n3 == 0 && n4 > 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = NORTH;
+				tilesRotation = WEST;
 			}
-			// Water's Corner South
+			// Water's Corner East
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 0 |
 			// +----+----+  +---+---+
@@ -840,9 +917,9 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 == 0 && n3 == 0 && n4 == 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = SOUTH;
+				tilesRotation = EAST;
 			}
-			// Water's Corner East
+			// Water's Corner South
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 1 |
 			// +----+----+  +---+---+
@@ -851,9 +928,9 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 == 0 && n2 > 0 && n3 == 0 && n4 == 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = EAST;
+				tilesRotation = SOUTH;
 			}
-			// Water's Corner West
+			// Water's Corner North
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
 			// +----+----+  +---+---+
@@ -862,14 +939,14 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 == 0 && n2 == 0 && n3 > 0 && n4 == 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = WEST;
+				tilesRotation = NORTH;
 			}
 
 			//-------------------------//
 			// Cliff's & Ramp's Corner
 			//-------------------------//
 
-			// Corner North
+			// Corner East
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
 			// +----+----+  +---+---+
@@ -878,14 +955,14 @@ Dictionary TerrainGen::generate(
 			//
 			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n4 > n1 && n4 > n2 && n4 > n3) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = NORTH;
+				tilesRotation = EAST;
 			}
-			// Corner South
+			// Corner West
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 2 | 1 |
 			// +----+----+  +---+---+
@@ -894,14 +971,14 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n1 > n3 && n1 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = SOUTH;
+				tilesRotation = WEST;
 			}
-			// Corner East
+			// Corner North
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 2 |
 			// +----+----+  +---+---+
@@ -910,14 +987,14 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n2 > n1 && n2 > n3 && n2 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = EAST;
+				tilesRotation = NORTH;
 			}
-			// Corner East
+			// Corner South
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
 			// +----+----+  +---+---+
@@ -926,19 +1003,19 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n3 > n1 && n3 > n2 && n3 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF_CORNER;
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = WEST;
+				tilesRotation = SOUTH;
 			}
 
 			//-------------------------//
 			// Cliff's & Ramp's Edges
 			//-------------------------//
 
-			// Cliff or Ramp Edge North
+			// Cliff or Ramp Edge West
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
 			// +----+----+  +---+---+
@@ -947,14 +1024,14 @@ Dictionary TerrainGen::generate(
 			//
 			if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 < n3 && n1 < n4 && n2 < n4 && n2 < n3) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = NORTH;
+				tilesRotation = WEST;
 			}
-			// Cliff's Edge South
+			// Cliff's Edge East
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 2 | 2 |
 			// +----+----+  +---+---+
@@ -963,14 +1040,14 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n3 && n1 > n4 && n2 > n4 && n2 > n3) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = SOUTH;
+				tilesRotation = EAST;
 			}
-			// Cliff's Edge East
+			// Cliff's Edge North
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 2 | 1 |
 			// +----+----+  +---+---+
@@ -979,14 +1056,14 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 < n2 && n1 < n4 && n3 < n2 && n3 < n4) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = EAST;
+				tilesRotation = NORTH;
 			}
-			// Cliff's Edge West
+			// Cliff's Edge South
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 2 |
 			// +----+----+  +---+---+
@@ -995,12 +1072,12 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n1 > n2 && n1 > n4 && n3 > n2 && n3 > n4) {
 				// If Not-Walkable, Valid Cliff
-				if (slope < cliffThreshold || !walkableMap[x][y]) {
+				if (slope < cliffThreshold || walkableMap[x][y]) {
 					tileMap[x][y] = CLIFF;
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = WEST;
+				tilesRotation = SOUTH;
 			}
 
 			/*****************************************************
@@ -1061,7 +1138,7 @@ Dictionary TerrainGen::generate(
 
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
-			bool isNonWalkable = !walkableMap[x][y];
+			bool isNonWalkable = walkableMap[x][y];
 			bool isNotCliffOrRamp = tileMap[x][y] != TileType::CLIFF &&
 					tileMap[x][y] != TileType::RAMP &&
 					tileMap[x][y] != TileType::CLIFF_CORNER &&
@@ -1127,24 +1204,38 @@ Dictionary TerrainGen::generate(
 
 	// Convert poissonSamples → Array<Vector3i>
 	Array poissonPoints;
-	for (const Point &p : poissonSamples) {
-		int elevation = elevationMap[p.x][p.y]; // Assuming elevationMap is [width][height]
-		poissonPoints.push_back(Vector3i(p.x, elevation, p.y));
+	for (size_t i = 0; i < poissonSamples.size(); ++i) {
+		int px = poissonSamples[i].x;
+		int py = poissonSamples[i].y;
+		int ex = px / 2;
+		int ey = py / 2;
+
+		if (ex >= 0 && ex < width && ey >= 0 && ey < height) {
+			int elevation = elevationMap[ex][ey];
+			Vector3i point(px, elevation, py);
+			poissonPoints.push_back(point);
+		}
 	}
 	result["poissonPoints"] = poissonPoints;
 
 	// Convert flatZones → Array<Dictionary>
 	Array flatZonePoints;
-	for (const Flat3x3s &zone : flatZones) {
-		flatZonePoints.push_back(Vector3i(zone.x, zone.elevation, zone.y));
+	for (size_t i = 0; i < flatZones.size(); ++i) {
+		int fx = flatZones[i].x;
+		int fy = flatZones[i].y;
+		int elevation = flatZones[i].elevation;
+
+		Vector3i point(fx, elevation, fy);
+		flatZonePoints.push_back(point);
 	}
 	result["flatZonePoints"] = flatZonePoints;
 
 	// Convert elevationMap → Array<Array<int>>
 	Array elevationArray;
-	for (const auto &row : elevationMap) {
+	for (size_t i = 0; i < elevationMap.size(); ++i) {
 		Array inner;
-		for (int val : row) {
+		for (size_t j = 0; j < elevationMap[i].size(); ++j) {
+			int val = elevationMap[i][j];
 			inner.push_back(val);
 		}
 		elevationArray.push_back(inner);

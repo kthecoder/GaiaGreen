@@ -19,7 +19,7 @@ func _ready():
 	#generate(grid_map, 128, 128, 4, seed_value, 12, NoiseType.VALUE, 0.79, 0.1);
 
 	# Simplex Noise Based
-	var result: Dictionary = generate(grid_map, 128, 128, 4, seed_value, 12, NoiseType.SIMPLEX, 0.3, 0.2, 0.02);
+	var result: Dictionary = generate(grid_map, 128, 128, 4, seed_value, 12, NoiseType.SIMPLEX, 0.6, 0.01, 0.02);
 
 	#
 	#
@@ -28,14 +28,14 @@ func _ready():
 	#		Returns World Points for object placement
 	#
 
-	var elevation_map: Array = result["elevationMap"]
-	print("Elevation at (0,0): ", elevation_map[0][0])
-
-	var flat_zones: Array = result["flatZones"]
-	for zone in flat_zones:
-		print("Flat zone at (%d, %d) with elevation %d" % [zone["x"], zone["y"], zone["elevation"]])
-
-	# Access Poisson samples
-	var poisson_points: Array = result["poissonPoints"]
-	for point in poisson_points:
-		print("Poisson sample at: ", point)
+	#var elevation_map: Array = result["elevationMap"]
+	#print("Elevation at (0,0): ", elevation_map[0][0])
+#
+	#var flat_zones: Array = result["flatZones"]
+	#for zone in flat_zones:
+		#print("Flat zone at (%d, %d) with elevation %d" % [zone["x"], zone["y"], zone["elevation"]])
+#
+	## Access Poisson samples
+	#var poisson_points: Array = result["poissonPoints"]
+	#for point in poisson_points:
+		#print("Poisson sample at: ", point)
