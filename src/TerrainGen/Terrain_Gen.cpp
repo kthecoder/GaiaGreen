@@ -605,59 +605,6 @@ Dictionary TerrainGen::generate(
 		}
 	}
 
-	//
-	// Phase 4 : Setting Walkable Area's
-	//
-	//		Modify Elevation Map to ensure walkable area's are expressed
-	//
-	//		If the majority of cells in a 2x2 are marked walkable,
-	//		ensure elevation map's neighbors are equal value
-	//
-	//		NOTICE : HeightMap.size() == elevationMap.size() * 2;
-
-	for (int x = 1; x < widthx2 - 2; ++x) {
-		for (int y = 1; y < heightx2 - 2; ++y) {
-			// Check 2x2 block
-			bool w1 = walkableMap[x][y];
-			bool w2 = walkableMap[x][y + 1];
-			bool w3 = walkableMap[x + 1][y];
-			bool w4 = walkableMap[x + 1][y + 1];
-
-			int walkableCount = w1 + w2 + w3 + w4;
-
-			if (walkableCount >= 3) {
-				vector<int> values = {
-					heightMap[x][y],
-					heightMap[x][y + 1],
-					heightMap[x + 1][y],
-					heightMap[x + 1][y + 1]
-				};
-
-				int heightMode = values[0];
-				int maxCount = 0;
-
-				for (int i = 0; i < values.size(); ++i) {
-					int count = 1;
-					for (int j = i + 1; j < values.size(); ++j)
-						if (values[j] == values[i])
-							++count;
-
-					if (count > maxCount) {
-						maxCount = count;
-						heightMode = values[i];
-					}
-				}
-
-				// Majority walkable — flatten elevation
-
-				heightMap[x][y] = heightMode;
-				heightMap[x][y + 1] = heightMode;
-				heightMap[x + 1][y] = heightMode;
-				heightMap[x + 1][y + 1] = heightMode;
-			}
-		}
-	}
-
 	/*****************************************************
 
 		Enforce Square Patterns
@@ -1246,5 +1193,5 @@ Dictionary TerrainGen::generate(
 }
 
 void TerrainGen::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
+	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "openAreaMin", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
 }
