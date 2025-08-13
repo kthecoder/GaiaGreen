@@ -23,10 +23,10 @@ class TerrainGen : public Node {
 
 protected:
 	// Values for Godot's GridMap Rotation input
-	int NORTH = 0;
-	int SOUTH = 16;
-	int EAST = 10;
-	int WEST = 22;
+	int NORTH = 0; // No Rotation
+	int EAST = 16; // 90° Y-axis rotation
+	int SOUTH = 10; // 180° Y-axis rotation
+	int WEST = 22; // 270° Y-axis rotation
 
 	// Tile Definitions
 	enum TileType {

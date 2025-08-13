@@ -711,6 +711,26 @@ Dictionary TerrainGen::generate(
 		tile's for each cell
 
 	*****************************************************/
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			int n1 = heightMap[x][y];
+			int n2 = heightMap[x + 1][y];
+			int n3 = heightMap[x][y + 1];
+			int n4 = heightMap[x + 1][y + 1];
+
+			// Determine the Elevation Value
+			//
+			//	Elevation of tile is the max of the neighbors elevation,
+			//	assuming that the random noise is consistent in its spread
+			//
+			int elevation = max({ n1, n2, n3, n4 });
+
+			if (elevation == 0) { // Water Tiles are considered the same elevation as Ground
+				elevation = 1;
+			}
+			elevationMap[x][y] = elevation;
+		}
+	}
 
 	// Loop over all the grid cells
 	for (int x = 0; x < width; x++) {
@@ -730,13 +750,6 @@ Dictionary TerrainGen::generate(
 			int n2 = heightMap[x + 1][y];
 			int n3 = heightMap[x][y + 1];
 			int n4 = heightMap[x + 1][y + 1];
-
-			// Determine the Elevation Value
-			//
-			//	Elevation of tile is the max of the neighbors elevation,
-			//	assuming that the random noise is consistent in its spread
-			//
-			int elevation = max({ n1, n2, n3, n4 });
 
 			// Determine the Slope from Raw Noise
 			//
@@ -844,7 +857,7 @@ Dictionary TerrainGen::generate(
 			// Water Corners
 			//-------------------------//
 
-			// Water's Corner West
+			// Water's Corner WEST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
 			// +----+----+  +---+---+
@@ -855,7 +868,7 @@ Dictionary TerrainGen::generate(
 				tileMap[x][y] = WATER_CORNER;
 				tilesRotation = WEST;
 			}
-			// Water's Corner East
+			// Water's Corner EAST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 0 |
 			// +----+----+  +---+---+
@@ -866,7 +879,7 @@ Dictionary TerrainGen::generate(
 				tileMap[x][y] = WATER_CORNER;
 				tilesRotation = EAST;
 			}
-			// Water's Corner South
+			// Water's Corner SOUTH
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 1 |
 			// +----+----+  +---+---+
@@ -877,7 +890,7 @@ Dictionary TerrainGen::generate(
 				tileMap[x][y] = WATER_CORNER;
 				tilesRotation = SOUTH;
 			}
-			// Water's Corner North
+			// Water's Corner NORTH
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
 			// +----+----+  +---+---+
@@ -893,7 +906,7 @@ Dictionary TerrainGen::generate(
 			// Cliff's & Ramp's Corner
 			//-------------------------//
 
-			// Corner East
+			// Corner EAST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
 			// +----+----+  +---+---+
@@ -909,7 +922,7 @@ Dictionary TerrainGen::generate(
 				}
 				tilesRotation = EAST;
 			}
-			// Corner West
+			// Corner WEST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 2 | 1 |
 			// +----+----+  +---+---+
@@ -925,7 +938,7 @@ Dictionary TerrainGen::generate(
 				}
 				tilesRotation = WEST;
 			}
-			// Corner North
+			// Corner NORTH
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 2 |
 			// +----+----+  +---+---+
@@ -941,7 +954,7 @@ Dictionary TerrainGen::generate(
 				}
 				tilesRotation = NORTH;
 			}
-			// Corner South
+			// Corner SOUTH
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 0 | 0 |
 			// +----+----+  +---+---+
@@ -962,7 +975,15 @@ Dictionary TerrainGen::generate(
 			// Cliff's & Ramp's Edges
 			//-------------------------//
 
-			// Cliff or Ramp Edge West
+			// Tile Start
+			// No Rotation -> North
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 2 |
+			// +----+----+  +---+---+
+
+			// Cliff or Ramp Edge EAST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
 			// +----+----+  +---+---+
@@ -976,9 +997,18 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = WEST;
+				tilesRotation = EAST;
 			}
-			// Cliff's Edge East
+			//
+			// Tile Start
+			// No Rotation -> North
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			//
+			// Cliff's Edge WEST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 2 | 2 |
 			// +----+----+  +---+---+
@@ -992,9 +1022,18 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = EAST;
+				tilesRotation = WEST;
 			}
-			// Cliff's Edge North
+			//
+			// Tile Start
+			// No Rotation -> North
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			//
+			// Cliff's Edge SOUTH
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 2 | 1 |
 			// +----+----+  +---+---+
@@ -1008,9 +1047,18 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = NORTH;
+				tilesRotation = SOUTH;
 			}
-			// Cliff's Edge South
+			//
+			// Tile Start
+			// No Rotation -> North
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 2 |
+			// +----+----+  +---+---+
+			//
+			// Cliff's Edge NORTH
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 2 |
 			// +----+----+  +---+---+
@@ -1024,7 +1072,7 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = SOUTH;
+				tilesRotation = NORTH;
 			}
 
 			/*****************************************************
@@ -1032,8 +1080,8 @@ Dictionary TerrainGen::generate(
 				Grid Map Cell Setter
 
 			*****************************************************/
-			elevationMap[x][y] = elevation;
-			myGridMap->set_cell_item(Vector3i(x, elevation, y), tileMap[x][y], tilesRotation);
+
+			myGridMap->set_cell_item(Vector3i(x, elevationMap[x][y], y), tileMap[x][y], tilesRotation);
 		}
 	}
 
