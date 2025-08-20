@@ -1439,174 +1439,231 @@ Dictionary TerrainGen::generate(
 				// | m6 | m7 | m8 |
 				// +----+----+----+
 
-				if (nEdge && eEdge) { // m2 + m5
+				// Diagonal's
+				//
+				// NE (m3), SE (m8), SW (m6), NW (m1)
+				// if -1, not ground tile
+				vector<int> dElevation = { -1, -1, -1, -1 };
+				if (neGround) {
+					dElevation[0] = neHeight;
 				}
-				if (sEdge && eEdge) { // m5 + m7
-				}
-				if (nEdge && wEdge) { // m4 + m2
-				}
-				if (sEdge && wEdge) { // m4 + m7
+
+				if (seGround) {
+					dElevation[1] = seHeight;
 				}
 
-				myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, rotation_val);
-			}
-		}
+				if (swGround) {
+					dElevation[2] = swHeight;
+				}
 
-		/*****************************************************
+				if (nwGround) {
+					dElevation[3] = nwHeight;
+				}
 
-			Open Area Finder
+				if (!(nEdge && eEdge)) { // m2 + m5 | m3
+					dElevation[0] = -1;
+				}
 
-				Find areas that have 3x3 flat areas
-				Used for placing Large Structures
+				if (!(sEdge && eEdge)) { // m5 + m7 | m8
+					dElevation[1] = -1;
+				}
 
-		*****************************************************/
-		// Empty FlatZones
-		flatZones.clear();
+				if (!(sEdge && wEdge)) { // m4 + m7 | m6
+					dElevation[2] = -1;
+				}
 
-		for (int i = 0; i <= width - 3; i += 3) {
-			for (int j = 0; j <= height - 3; j += 3) {
-				bool allGround = true;
+				if (!(nEdge && wEdge)) { // m4 + m2 | m1
+					dElevation[3] = -1;
+				}
 
-				// Check Neighbors
-				for (int dx = 0; dx < 3 && allGround; dx++) {
-					for (int dy = 0; dy < 3; dy++) {
-						if (tileMap[i + dx][j + dy] != GROUND) {
-							allGround = false;
-							break;
-						}
+				int maxElevation = dElevation[0];
+				int dEleIndex = 0;
+
+				for (size_t i = 1; i < dElevation.size(); ++i) {
+					if (dElevation[i] > maxElevation) {
+						maxElevation = dElevation[i];
+						dEleIndex = static_cast<int>(i);
 					}
 				}
 
-				if (allGround) {
-					int centerX = i + 1;
-					int centerY = j + 1;
-					int elevation = elevationMap[centerX][centerY];
-
-					flatZones.push_back({ centerX, elevation, centerY });
+				switch (dEleIndex) {
+					case 0:
+						rotation_val = EAST;
+						break;
+					case 1:
+						rotation_val = SOUTH;
+						break;
+					case 2:
+						rotation_val = WEST;
+						break;
+					case 3:
+						rotation_val = NORTH;
+						break;
+					default:
+						rotation_val = NORTH;
+						break;
 				}
 			}
+
+			myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, rotation_val);
 		}
+	}
 
-		/*****************************************************
+	/*****************************************************
 
-			Poisson Object Placement
+		Open Area Finder
 
-				Use Walkable map to find non-walkable area's as placeable area's
-				Use Cliffs & Ramp's Placement as non-placeable area's
+			Find areas that have 3x3 flat areas
+			Used for placing Large Structures
 
-		*****************************************************/
+	*****************************************************/
+	// Empty FlatZones
+	flatZones.clear();
 
-		// Generate Placeable Area's
+	for (int i = 0; i <= width - 3; i += 3) {
+		for (int j = 0; j <= height - 3; j += 3) {
+			bool allGround = true;
 
-		for (int x = 0; x < width; x++) {
-			for (int y = 0; y < height; y++) {
-				bool isNonWalkable = walkableMap[x][y];
-				bool isNotCliffOrRamp = tileMap[x][y] != TileType::CLIFF &&
-						tileMap[x][y] != TileType::RAMP &&
-						tileMap[x][y] != TileType::CLIFF_CORNER &&
-						tileMap[x][y] != TileType::RAMP_CORNER;
-
-				// Only mark subcells as placeable if both conditions are true
-				bool isPlaceable = isNonWalkable && isNotCliffOrRamp;
-
-				placeableMap[x * 2][y * 2] = isPlaceable;
-				placeableMap[x * 2 + 1][y * 2] = isPlaceable;
-				placeableMap[x * 2][y * 2 + 1] = isPlaceable;
-				placeableMap[x * 2 + 1][y * 2 + 1] = isPlaceable;
-			}
-		}
-
-		// Poisson Disk Sampling
-
-		float minDistance = 3.0f; // Minimum spacing between objects
-
-		for (int x = 0; x < widthx2; x++) {
-			for (int y = 0; y < heightx2; y++) {
-				if (!placeableMap[x][y])
-					continue;
-
-				bool tooClose = false;
-				for (const Point &p : poissonSamples) {
-					float dx = p.x - x;
-					float dy = p.y - y;
-					if (sqrt(dx * dx + dy * dy) < minDistance) {
-						tooClose = true;
+			// Check Neighbors
+			for (int dx = 0; dx < 3 && allGround; dx++) {
+				for (int dy = 0; dy < 3; dy++) {
+					if (tileMap[i + dx][j + dy] != GROUND) {
+						allGround = false;
 						break;
 					}
 				}
+			}
 
-				if (!tooClose) {
-					poissonSamples.push_back({ x, y });
+			if (allGround) {
+				int centerX = i + 1;
+				int centerY = j + 1;
+				int elevation = elevationMap[centerX][centerY];
+
+				flatZones.push_back({ centerX, elevation, centerY });
+			}
+		}
+	}
+
+	/*****************************************************
+
+		Poisson Object Placement
+
+			Use Walkable map to find non-walkable area's as placeable area's
+			Use Cliffs & Ramp's Placement as non-placeable area's
+
+	*****************************************************/
+
+	// Generate Placeable Area's
+
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			bool isNonWalkable = walkableMap[x][y];
+			bool isNotCliffOrRamp = tileMap[x][y] != TileType::CLIFF &&
+					tileMap[x][y] != TileType::RAMP &&
+					tileMap[x][y] != TileType::CLIFF_CORNER &&
+					tileMap[x][y] != TileType::RAMP_CORNER;
+
+			// Only mark subcells as placeable if both conditions are true
+			bool isPlaceable = isNonWalkable && isNotCliffOrRamp;
+
+			placeableMap[x * 2][y * 2] = isPlaceable;
+			placeableMap[x * 2 + 1][y * 2] = isPlaceable;
+			placeableMap[x * 2][y * 2 + 1] = isPlaceable;
+			placeableMap[x * 2 + 1][y * 2 + 1] = isPlaceable;
+		}
+	}
+
+	// Poisson Disk Sampling
+
+	float minDistance = 3.0f; // Minimum spacing between objects
+
+	for (int x = 0; x < widthx2; x++) {
+		for (int y = 0; y < heightx2; y++) {
+			if (!placeableMap[x][y])
+				continue;
+
+			bool tooClose = false;
+			for (const Point &p : poissonSamples) {
+				float dx = p.x - x;
+				float dy = p.y - y;
+				if (sqrt(dx * dx + dy * dy) < minDistance) {
+					tooClose = true;
+					break;
 				}
 			}
-		}
 
-		/*****************************************************
-
-			Return's
-
-				Return a dictionary of values needed for object
-				placement
-
-				Return : Elevation Map
-					Necessary for height of objects
-
-				Return : Flat Zones
-					Necessary for placing large stuctures
-
-				Return : Poisson Points
-
-		*****************************************************/
-
-		//TODO : Return data needed for object placement's
-		//TODO : Return flatZones/openArea's
-		//TODO : Return poisson disk sampling results
-
-		Dictionary result;
-
-		// Convert poissonSamples → Array<Vector3i>
-		Array poissonPoints;
-		for (size_t i = 0; i < poissonSamples.size(); ++i) {
-			int px = poissonSamples[i].x;
-			int py = poissonSamples[i].y;
-			int ex = px / 2;
-			int ey = py / 2;
-
-			if (ex >= 0 && ex < width && ey >= 0 && ey < height) {
-				int elevation = elevationMap[ex][ey];
-				Vector3i point(px, elevation, py);
-				poissonPoints.push_back(point);
+			if (!tooClose) {
+				poissonSamples.push_back({ x, y });
 			}
 		}
-		result["poissonPoints"] = poissonPoints;
-
-		// Convert flatZones → Array<Dictionary>
-		Array flatZonePoints;
-		for (size_t i = 0; i < flatZones.size(); ++i) {
-			int fx = flatZones[i].x;
-			int fy = flatZones[i].y;
-			int elevation = flatZones[i].elevation;
-
-			Vector3i point(fx, elevation, fy);
-			flatZonePoints.push_back(point);
-		}
-		result["flatZonePoints"] = flatZonePoints;
-
-		// Convert elevationMap → Array<Array<int>>
-		Array elevationArray;
-		for (size_t i = 0; i < elevationMap.size(); ++i) {
-			Array inner;
-			for (size_t j = 0; j < elevationMap[i].size(); ++j) {
-				int val = elevationMap[i][j];
-				inner.push_back(val);
-			}
-			elevationArray.push_back(inner);
-		}
-		result["elevationMap"] = elevationArray;
-
-		return result;
 	}
 
-	void TerrainGen::_bind_methods() {
-		ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "openAreaMin", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
+	/*****************************************************
+
+		Return's
+
+			Return a dictionary of values needed for object
+			placement
+
+			Return : Elevation Map
+				Necessary for height of objects
+
+			Return : Flat Zones
+				Necessary for placing large stuctures
+
+			Return : Poisson Points
+
+	*****************************************************/
+
+	//TODO : Return data needed for object placement's
+	//TODO : Return flatZones/openArea's
+	//TODO : Return poisson disk sampling results
+
+	Dictionary result;
+
+	// Convert poissonSamples → Array<Vector3i>
+	Array poissonPoints;
+	for (size_t i = 0; i < poissonSamples.size(); ++i) {
+		int px = poissonSamples[i].x;
+		int py = poissonSamples[i].y;
+		int ex = px / 2;
+		int ey = py / 2;
+
+		if (ex >= 0 && ex < width && ey >= 0 && ey < height) {
+			int elevation = elevationMap[ex][ey];
+			Vector3i point(px, elevation, py);
+			poissonPoints.push_back(point);
+		}
 	}
+	result["poissonPoints"] = poissonPoints;
+
+	// Convert flatZones → Array<Dictionary>
+	Array flatZonePoints;
+	for (size_t i = 0; i < flatZones.size(); ++i) {
+		int fx = flatZones[i].x;
+		int fy = flatZones[i].y;
+		int elevation = flatZones[i].elevation;
+
+		Vector3i point(fx, elevation, fy);
+		flatZonePoints.push_back(point);
+	}
+	result["flatZonePoints"] = flatZonePoints;
+
+	// Convert elevationMap → Array<Array<int>>
+	Array elevationArray;
+	for (size_t i = 0; i < elevationMap.size(); ++i) {
+		Array inner;
+		for (size_t j = 0; j < elevationMap[i].size(); ++j) {
+			int val = elevationMap[i][j];
+			inner.push_back(val);
+		}
+		elevationArray.push_back(inner);
+	}
+	result["elevationMap"] = elevationArray;
+
+	return result;
+}
+
+void TerrainGen::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "openAreaMin", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
+}
