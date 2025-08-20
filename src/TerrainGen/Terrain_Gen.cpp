@@ -94,7 +94,8 @@ Dictionary TerrainGen::generate(
 	// Render Grid -> Real size grid with final tile type values
 	vector<vector<TileType>> tileMap(width, vector<TileType>(height, GROUND));
 	// Render Grid's Elevation Values -> Real size grid with elevation ints
-	vector<vector<int>> elevationMap(width, vector<int>(height, 0));
+	vector<vector<int>> elevationMap(width, vector<int>(height, 0)); // Unfiltered Elevation | Includes 0 Elevations
+	vector<vector<int>> elevationMapTiles(width, vector<int>(height, 0)); // Filtered Elevation | Used Elevation in Tile Map
 	// Each cell represents a quarter of the original tile
 	vector<vector<bool>> placeableMap(widthx2, vector<bool>(heightx2, true));
 
@@ -711,33 +712,14 @@ Dictionary TerrainGen::generate(
 		tile's for each cell
 
 	*****************************************************/
+
+	//
+	// Phase 1 : Determine the Tile Type
+	//
+	//	Tiles are determined based on the dual grid system
+	//
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
-			int n1 = heightMap[x][y];
-			int n2 = heightMap[x + 1][y];
-			int n3 = heightMap[x][y + 1];
-			int n4 = heightMap[x + 1][y + 1];
-
-			// Determine the Elevation Value
-			//
-			//	Elevation of tile is the max of the neighbors elevation,
-			//	assuming that the random noise is consistent in its spread
-			//
-			int elevation = max({ n1, n2, n3, n4 });
-
-			if (elevation == 0) { // Water Tiles are considered the same elevation as Ground
-				elevation = 1;
-			}
-			elevationMap[x][y] = elevation;
-		}
-	}
-
-	// Loop over all the grid cells
-	for (int x = 0; x < width; x++) {
-		for (int y = 0; y < height; y++) {
-			// Godot GridMap Tile Rotation
-			int tilesRotation = NORTH;
-
 			// Neighbor's of Data Grid Map
 			// +----+----+
 			// | n1 | n2 |
@@ -750,6 +732,18 @@ Dictionary TerrainGen::generate(
 			int n2 = heightMap[x + 1][y];
 			int n3 = heightMap[x][y + 1];
 			int n4 = heightMap[x + 1][y + 1];
+
+			// Determine Elevation Values
+
+			int elevation = max({ n1, n2, n3, n4 });
+
+			elevationMap[x][y] = elevation;
+
+			if (elevation == 0) { // Water Tiles are considered the same elevation as Ground
+				elevation = 1;
+			}
+
+			elevationMapTiles[x][y] = elevation;
 
 			// Determine the Slope from Raw Noise
 			//
@@ -816,7 +810,7 @@ Dictionary TerrainGen::generate(
 			//
 			if (n1 == 0 && n2 == 0 && n3 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = EAST;
+
 			}
 			// Water's Edge West
 			// +----+----+  +---+---+
@@ -827,7 +821,6 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 > 0 && n3 == 0 && n4 == 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = WEST;
 			}
 			// Water's Edge South
 			// +----+----+  +---+---+
@@ -838,7 +831,6 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 == 0 && n3 == 0 && n2 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = SOUTH;
 
 			}
 			// Water's Edge North
@@ -850,7 +842,6 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n2 == 0 && n4 == 0 && n1 > 0 && n3 > 0) {
 				tileMap[x][y] = WATER_EDGE;
-				tilesRotation = NORTH;
 			}
 
 			//-------------------------//
@@ -866,7 +857,6 @@ Dictionary TerrainGen::generate(
 			//
 			if (n1 == 0 && n2 == 0 && n3 == 0 && n4 > 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = WEST;
 			}
 			// Water's Corner EAST
 			// +----+----+  +---+---+
@@ -877,7 +867,6 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 > 0 && n2 == 0 && n3 == 0 && n4 == 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = EAST;
 			}
 			// Water's Corner SOUTH
 			// +----+----+  +---+---+
@@ -888,7 +877,6 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 == 0 && n2 > 0 && n3 == 0 && n4 == 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = SOUTH;
 			}
 			// Water's Corner NORTH
 			// +----+----+  +---+---+
@@ -899,7 +887,6 @@ Dictionary TerrainGen::generate(
 			//
 			else if (n1 == 0 && n2 == 0 && n3 > 0 && n4 == 0) {
 				tileMap[x][y] = WATER_CORNER;
-				tilesRotation = NORTH;
 			}
 
 			//-------------------------//
@@ -920,7 +907,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = EAST;
 			}
 			// Corner WEST
 			// +----+----+  +---+---+
@@ -936,7 +922,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = WEST;
 			}
 			// Corner NORTH
 			// +----+----+  +---+---+
@@ -952,7 +937,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = NORTH;
 			}
 			// Corner SOUTH
 			// +----+----+  +---+---+
@@ -968,7 +952,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP_CORNER;
 				}
-				tilesRotation = SOUTH;
 			}
 
 			//-------------------------//
@@ -997,7 +980,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = EAST;
 			}
 			//
 			// Tile Start
@@ -1022,7 +1004,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = WEST;
 			}
 			//
 			// Tile Start
@@ -1047,7 +1028,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = SOUTH;
 			}
 			//
 			// Tile Start
@@ -1072,7 +1052,6 @@ Dictionary TerrainGen::generate(
 				} else {
 					tileMap[x][y] = RAMP;
 				}
-				tilesRotation = NORTH;
 			}
 
 			/*****************************************************
@@ -1081,165 +1060,553 @@ Dictionary TerrainGen::generate(
 
 			*****************************************************/
 
-			myGridMap->set_cell_item(Vector3i(x, elevationMap[x][y], y), tileMap[x][y], tilesRotation);
+			myGridMap->set_cell_item(Vector3i(x, elevation, y), tileMap[x][y], NORTH);
 		}
 	}
 
-	/*****************************************************
+	//
+	// Phase 2 : Determine the Tile's Rotation
+	//
+	//	Tile Rotations are dependent on the surrounding tile types
+	//
+	//
+	// +----+----+----+  +----+----+----+
+	// | m1 | m2 | m3 |  | n1 | n2 | n3 |
+	// +----+----+----+  +----+----+----+
+	// | m4 | c  | m5 |  | n4 | c  | n5 |
+	// +----+----+----+  +----+----+----+
+	// | m6 | m7 | m8 |  | n6 | n7 | n8 |
+	// +----+----+----+  +----+----+----+
+	//
+	// for (int x = 0; x < width; x++) {
+	// 	for (int y = 0; y < height; y++) {
+	// 		int c = elevationMap[y][x];
+	// 		int n = myGridMap->get_cell_item(Vector3i(x, c, y));
 
-		Open Area Finder
+	// 		if (n == WATER || n == GROUND) { // Water & Ground Don't need rotations
+	// 			break;
+	// 		}
 
-			Find areas that have 3x3 flat areas
-			Used for placing Large Structures
+	// 		auto safe_height = [&](int xx, int yy, int c_height) {
+	// 			if (xx < 0 || yy < 0 || xx >= width || yy >= height)
+	// 				return c_height; // out of bounds → pretend it's the center
+	// 			return elevationMap[xx][yy];
+	// 		};
 
-	*****************************************************/
-	// Empty FlatZones
-	flatZones.clear();
+	// 		int m1 = safe_height(x - 1, y - 1, c);
+	// 		int m2 = safe_height(x - 1, y, c);
+	// 		int m3 = safe_height(x - 1, y + 1, c);
+	// 		int m4 = safe_height(x, y - 1, c);
+	// 		int m5 = safe_height(x, y + 1, c);
+	// 		int m6 = safe_height(x + 1, y - 1, c);
+	// 		int m7 = safe_height(x + 1, y, c);
+	// 		int m8 = safe_height(x + 1, y + 1, c);
 
-	for (int i = 0; i <= width - 3; i += 3) {
-		for (int j = 0; j <= height - 3; j += 3) {
-			bool allGround = true;
+	// 		// Empty Cell's return -1
 
-			// Check Neighbors
-			for (int dx = 0; dx < 3 && allGround; dx++) {
-				for (int dy = 0; dy < 3; dy++) {
-					if (tileMap[i + dx][j + dy] != GROUND) {
-						allGround = false;
-						break;
+	// 		int n1 = myGridMap->get_cell_item(Vector3i(x, m1, y));
+	// 		int n2 = myGridMap->get_cell_item(Vector3i(x, m2, y));
+	// 		int n3 = myGridMap->get_cell_item(Vector3i(x, m3, y));
+	// 		int n4 = myGridMap->get_cell_item(Vector3i(x, m4, y));
+	// 		int n5 = myGridMap->get_cell_item(Vector3i(x, m5, y));
+	// 		int n6 = myGridMap->get_cell_item(Vector3i(x, m6, y));
+	// 		int n7 = myGridMap->get_cell_item(Vector3i(x, m7, y));
+	// 		int n8 = myGridMap->get_cell_item(Vector3i(x, m8, y));
+
+	// 		// TODO : Determine rotation based on neighbors
+
+	// 		myGridMap->set_cell_item(Vector3i(x, elevationMap[x][y], y), tileMap[x][y], NORTH);
+	// 	}
+	// }
+
+	//
+	// Phase 2 : Determine the Tile's Rotation
+	// Rotations depend on surrounding tile types and elevations.
+	// We point uphill toward the highest GROUND neighbor (cardinals only).
+	//
+	// for (int x = 0; x < width; x++) {
+	// 	for (int y = 0; y < height; y++) {
+	// 		// Current cell elevation and tile id
+	// 		int c_height = elevationMapTiles[x][y];
+	// 		int tile_id = myGridMap->get_cell_item(Vector3i(x, c_height, y));
+
+	// 		// Skip tiles that don't need rotation
+	// 		if (tile_id == WATER || tile_id == GROUND) {
+	// 			continue;
+	// 		}
+
+	// 		// Safe elevation fetch that treats OOB as flat (center height)
+	// 		auto safe_height = [&](int gx, int gy, int fallback_h) {
+	// 			if (gx < 0 || gy < 0 || gx >= width || gy >= height) {
+	// 				return fallback_h;
+	// 			}
+	// 			return elevationMap[gx][gy];
+	// 		};
+
+	// 		// Safe neighbor tile fetch; OOB → -1 (empty)
+	// 		auto safe_tile_at = [&](int gx, int gy) {
+	// 			if (gx < 0 || gy < 0 || gx >= width || gy >= height) {
+	// 				return -1;
+	// 			}
+	// 			int h = elevationMap[gx][gy];
+	// 			return myGridMap->get_cell_item(Vector3i(gx, h, gy));
+	// 		};
+
+	// 		int best_dir = NORTH;
+	// 		float best_diff = -1e9f;
+
+	// 		{
+	// 			int nx = x + 0;
+	// 			int ny = y - 1;
+	// 			int nh = safe_height(nx, ny, c_height);
+	// 			int nt = safe_tile_at(nx, ny);
+	// 			if (nt == GROUND) {
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = SOUTH;
+	// 				}
+	// 			}
+	// 		}
+
+	// 		{
+	// 			int nx = x + 0;
+	// 			int ny = y + 1;
+	// 			int nh = safe_height(nx, ny, c_height);
+	// 			int nt = safe_tile_at(nx, ny);
+	// 			if (nt == GROUND) {
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = NORTH;
+	// 				}
+	// 			}
+	// 		}
+
+	// 		{
+	// 			int nx = x + 1;
+	// 			int ny = y + 0;
+	// 			int nh = safe_height(nx, ny, c_height);
+	// 			int nt = safe_tile_at(nx, ny);
+	// 			if (nt == GROUND) {
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = WEST;
+	// 				}
+	// 			}
+	// 		}
+
+	// 		// WEST (-1, 0)
+	// 		{
+	// 			int nx = x - 1;
+	// 			int ny = y + 0;
+	// 			int nh = safe_height(nx, ny, c_height);
+	// 			int nt = safe_tile_at(nx, ny);
+	// 			if (nt == GROUND) {
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = EAST;
+	// 				}
+	// 			}
+	// 		}
+
+	// 		// If no GROUND neighbor exists, optionally fall back to steepest slope regardless of type
+	// 		if (best_diff <= -1e8f) {
+	// 			// Evaluate all four directions using elevation only
+	// 			{
+	// 				int nx = x + 0, ny = y - 1;
+	// 				int nh = safe_height(nx, ny, c_height);
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = SOUTH;
+	// 				}
+	// 			}
+	// 			{
+	// 				int nx = x + 0, ny = y + 1;
+	// 				int nh = safe_height(nx, ny, c_height);
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = NORTH;
+	// 				}
+	// 			}
+	// 			{
+	// 				int nx = x + 1, ny = y + 0;
+	// 				int nh = safe_height(nx, ny, c_height);
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = WEST;
+	// 				}
+	// 			}
+	// 			{
+	// 				int nx = x - 1, ny = y + 0;
+	// 				int nh = safe_height(nx, ny, c_height);
+	// 				float diff = float(nh) - float(c_height);
+	// 				if (diff > best_diff) {
+	// 					best_diff = diff;
+	// 					best_dir = EAST;
+	// 				}
+	// 			}
+	// 		}
+
+	// 		myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, best_dir);
+	// 	}
+	// }
+
+	//
+	// Phase 2 : Determine the Tile's Rotation
+	//
+	// 	Models: ramps/cliffs/water_edge start with HIGH side pointing −Z (NORTH).
+	// 	Corner models start with HIGH at (−Z, +X) i.e., NE corner.
+	// 	Rotation indices: NORTH=0, EAST=16, SOUTH=10, WEST=22
+	//
+	// T = Target Cell / Target Tile
+	// +----+----+----+
+	// | m1 | m2 | m3 |
+	// +----+----+----+
+	// | m4 | T  | m5 |
+	// +----+----+----+
+	// | m6 | m7 | m8 |
+	// +----+----+----+
+	//
+	for (int x = 0; x < width; x++) {
+		for (int y = 0; y < height; y++) {
+			int c_height = elevationMap[x][y];
+			int tile_id = myGridMap->get_cell_item(Vector3i(x, c_height, y));
+			if (tile_id == -1 || tile_id == WATER || tile_id == GROUND)
+				continue;
+
+			auto in_bounds = [&](int gx, int gy) {
+				return gx >= 0 && gy >= 0 && gx < width && gy < height;
+			};
+			auto safe_height = [&](int gx, int gy, int fallback_h) {
+				return in_bounds(gx, gy) ? elevationMap[gx][gy] : fallback_h;
+			};
+			auto safe_tile_at = [&](int gx, int gy) {
+				if (!in_bounds(gx, gy))
+					return -1;
+				int h = elevationMap[gx][gy];
+				return myGridMap->get_cell_item(Vector3i(gx, h, gy));
+			};
+
+			int rotation_val = NORTH; // default face −Z
+
+			//
+			// Cardinal Neighbors
+			//
+			int sHeight = safe_height(x, y - 1, c_height);
+			int sTile = safe_tile_at(x, y - 1); // m2
+
+			int nHeight = safe_height(x, y + 1, c_height);
+			int nTile = safe_tile_at(x, y + 1); // m7
+
+			int eHeight = safe_height(x + 1, y, c_height);
+			int eTile = safe_tile_at(x + 1, y); // m5
+
+			int wHeight = safe_height(x - 1, y, c_height);
+			int wTile = safe_tile_at(x - 1, y); // m4
+
+			//
+			// Diagonal Neighbors
+			//
+			int neHeight = safe_height(x + 1, y + 1, c_height);
+			int neTile = safe_tile_at(x + 1, y + 1); // m3
+
+			int seHeight = safe_height(x + 1, y - 1, c_height);
+			int seTile = safe_tile_at(x + 1, y - 1); // m8
+
+			int swHeight = safe_height(x - 1, y - 1, c_height);
+			int swTile = safe_tile_at(x - 1, y - 1); // m6
+
+			int nwHeight = safe_height(x - 1, y + 1, c_height);
+			int nwTile = safe_tile_at(x - 1, y + 1); // m1
+
+			if (tile_id == RAMP || tile_id == CLIFF || tile_id == WATER_EDGE) {
+				// Point HIGH side toward the highest GROUND neighbor (uphill)
+				float best_diff = -1e9f;
+				if (sTile == GROUND) {
+					float d = float(sHeight) - float(c_height);
+					if (d > best_diff) {
+						best_diff = d;
+						rotation_val = SOUTH;
+					}
+				}
+				if (nTile == GROUND) {
+					float d = float(nHeight) - float(c_height);
+					if (d > best_diff) {
+						best_diff = d;
+						rotation_val = NORTH;
+					}
+				}
+				if (eTile == GROUND) {
+					float d = float(eHeight) - float(c_height);
+					if (d > best_diff) {
+						best_diff = d;
+						rotation_val = EAST;
+					}
+				}
+				if (wTile == GROUND) {
+					float d = float(wHeight) - float(c_height);
+					if (d > best_diff) {
+						best_diff = d;
+						rotation_val = WEST;
+					}
+				}
+
+				// Fallback: if no GROUND neighbor higher, use steepest slope regardless of type
+				if (best_diff <= -1e8f) {
+					float bd = -1e9f;
+					float dN = float(nHeight) - float(c_height);
+					float dS = float(sHeight) - float(c_height);
+					float dE = float(eHeight) - float(c_height);
+					float dW = float(wHeight) - float(c_height);
+					if (dN > bd) {
+						bd = dN;
+					}
+					if (dS > bd) {
+						bd = dS;
+						rotation_val = SOUTH;
+					}
+					if (dE > bd) {
+						bd = dE;
+						rotation_val = EAST;
+					}
+					if (dW > bd) {
+						bd = dW;
+						rotation_val = WEST;
 					}
 				}
 			}
 
-			if (allGround) {
-				int centerX = i + 1;
-				int centerY = j + 1;
-				int elevation = elevationMap[centerX][centerY];
+			// T = Target Cell
+			// +----+----+----+
+			// | m1 | m2 | m3 |
+			// +----+----+----+
+			// | m4 | T  | m5 |
+			// +----+----+----+
+			// | m6 | m7 | m8 |
+			// +----+----+----+
+			//
+			// T should consider m2 + m5, m5 + m7, m7 + m4, and m4 + m2; for cliffs and ramps
+			// Then it should find the highest elevation of ground piece at, m3, m8, m6, m1
+			// Then it should decide the rotation by rotating the cliff corner / ramp corner / water corner
+			// toward the higher elevation
+			//
+			// Corner meshes: choose the corner defined by edge tiles around T, then aim toward the higher diagonal ground
+			//
+			else if (tile_id == RAMP_CORNER || tile_id == CLIFF_CORNER || tile_id == WATER_CORNER) {
+				int ROT_CORNER_NE = WEST;
+				int ROT_CORNER_SE = EAST;
+				int ROT_CORNER_SW = SOUTH;
+				int ROT_CORNER_NW = NORTH;
 
-				flatZones.push_back({ centerX, elevation, centerY });
+				auto pos = [](float v) { return v > 0.f ? v : 0.f; };
+
+				// Decide which tile types count as "edge" for the current corner type
+				auto is_edge_for_corner = [&](TileType t) -> bool {
+					if (tile_id == WATER_CORNER) {
+						return t == WATER_EDGE;
+					} else if (tile_id == CLIFF_CORNER) {
+						return t == CLIFF;
+					} else {
+						return t == RAMP;
+					}
+				};
+
+				// Convenience flags for cardinal neighbors
+				const bool nEdge = is_edge_for_corner(static_cast<TileType>(nTile));
+				const bool eEdge = is_edge_for_corner(static_cast<TileType>(eTile));
+				const bool sEdge = is_edge_for_corner(static_cast<TileType>(sTile));
+				const bool wEdge = is_edge_for_corner(static_cast<TileType>(wTile));
+
+				// Diagonals must be pure ground for the “highest ground diagonal” rule
+				const bool neGround = (static_cast<TileType>(neTile) == GROUND);
+				const bool seGround = (static_cast<TileType>(seTile) == GROUND);
+				const bool swGround = (static_cast<TileType>(swTile) == GROUND);
+				const bool nwGround = (static_cast<TileType>(nwTile) == GROUND);
+
+				// TODO : Find Cardinal Pairs
+
+				// +----+----+----+
+				// | m1 | m2 | m3 |
+				// +----+----+----+
+				// | m4 | T  | m5 |
+				// +----+----+----+
+				// | m6 | m7 | m8 |
+				// +----+----+----+
+
+				if (nEdge && eEdge) { // m2 + m5
+				}
+				if (sEdge && eEdge) { // m5 + m7
+				}
+				if (nEdge && wEdge) { // m4 + m2
+				}
+				if (sEdge && wEdge) { // m4 + m7
+				}
+
+				myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, rotation_val);
 			}
 		}
-	}
 
-	/*****************************************************
+		/*****************************************************
 
-		Poisson Object Placement
+			Open Area Finder
 
-			Use Walkable map to find non-walkable area's as placeable area's
-			Use Cliffs & Ramp's Placement as non-placeable area's
+				Find areas that have 3x3 flat areas
+				Used for placing Large Structures
 
-	*****************************************************/
+		*****************************************************/
+		// Empty FlatZones
+		flatZones.clear();
 
-	// Generate Placeable Area's
+		for (int i = 0; i <= width - 3; i += 3) {
+			for (int j = 0; j <= height - 3; j += 3) {
+				bool allGround = true;
 
-	for (int x = 0; x < width; x++) {
-		for (int y = 0; y < height; y++) {
-			bool isNonWalkable = walkableMap[x][y];
-			bool isNotCliffOrRamp = tileMap[x][y] != TileType::CLIFF &&
-					tileMap[x][y] != TileType::RAMP &&
-					tileMap[x][y] != TileType::CLIFF_CORNER &&
-					tileMap[x][y] != TileType::RAMP_CORNER;
+				// Check Neighbors
+				for (int dx = 0; dx < 3 && allGround; dx++) {
+					for (int dy = 0; dy < 3; dy++) {
+						if (tileMap[i + dx][j + dy] != GROUND) {
+							allGround = false;
+							break;
+						}
+					}
+				}
 
-			// Only mark subcells as placeable if both conditions are true
-			bool isPlaceable = isNonWalkable && isNotCliffOrRamp;
+				if (allGround) {
+					int centerX = i + 1;
+					int centerY = j + 1;
+					int elevation = elevationMap[centerX][centerY];
 
-			placeableMap[x * 2][y * 2] = isPlaceable;
-			placeableMap[x * 2 + 1][y * 2] = isPlaceable;
-			placeableMap[x * 2][y * 2 + 1] = isPlaceable;
-			placeableMap[x * 2 + 1][y * 2 + 1] = isPlaceable;
-		}
-	}
-
-	// Poisson Disk Sampling
-
-	float minDistance = 3.0f; // Minimum spacing between objects
-
-	for (int x = 0; x < widthx2; x++) {
-		for (int y = 0; y < heightx2; y++) {
-			if (!placeableMap[x][y])
-				continue;
-
-			bool tooClose = false;
-			for (const Point &p : poissonSamples) {
-				float dx = p.x - x;
-				float dy = p.y - y;
-				if (sqrt(dx * dx + dy * dy) < minDistance) {
-					tooClose = true;
-					break;
+					flatZones.push_back({ centerX, elevation, centerY });
 				}
 			}
+		}
 
-			if (!tooClose) {
-				poissonSamples.push_back({ x, y });
+		/*****************************************************
+
+			Poisson Object Placement
+
+				Use Walkable map to find non-walkable area's as placeable area's
+				Use Cliffs & Ramp's Placement as non-placeable area's
+
+		*****************************************************/
+
+		// Generate Placeable Area's
+
+		for (int x = 0; x < width; x++) {
+			for (int y = 0; y < height; y++) {
+				bool isNonWalkable = walkableMap[x][y];
+				bool isNotCliffOrRamp = tileMap[x][y] != TileType::CLIFF &&
+						tileMap[x][y] != TileType::RAMP &&
+						tileMap[x][y] != TileType::CLIFF_CORNER &&
+						tileMap[x][y] != TileType::RAMP_CORNER;
+
+				// Only mark subcells as placeable if both conditions are true
+				bool isPlaceable = isNonWalkable && isNotCliffOrRamp;
+
+				placeableMap[x * 2][y * 2] = isPlaceable;
+				placeableMap[x * 2 + 1][y * 2] = isPlaceable;
+				placeableMap[x * 2][y * 2 + 1] = isPlaceable;
+				placeableMap[x * 2 + 1][y * 2 + 1] = isPlaceable;
 			}
 		}
-	}
 
-	/*****************************************************
+		// Poisson Disk Sampling
 
-		Return's
+		float minDistance = 3.0f; // Minimum spacing between objects
 
-			Return a dictionary of values needed for object
-			placement
+		for (int x = 0; x < widthx2; x++) {
+			for (int y = 0; y < heightx2; y++) {
+				if (!placeableMap[x][y])
+					continue;
 
-			Return : Elevation Map
-				Necessary for height of objects
+				bool tooClose = false;
+				for (const Point &p : poissonSamples) {
+					float dx = p.x - x;
+					float dy = p.y - y;
+					if (sqrt(dx * dx + dy * dy) < minDistance) {
+						tooClose = true;
+						break;
+					}
+				}
 
-			Return : Flat Zones
-				Necessary for placing large stuctures
-
-			Return : Poisson Points
-
-	*****************************************************/
-
-	//TODO : Return data needed for object placement's
-	//TODO : Return flatZones/openArea's
-	//TODO : Return poisson disk sampling results
-
-	Dictionary result;
-
-	// Convert poissonSamples → Array<Vector3i>
-	Array poissonPoints;
-	for (size_t i = 0; i < poissonSamples.size(); ++i) {
-		int px = poissonSamples[i].x;
-		int py = poissonSamples[i].y;
-		int ex = px / 2;
-		int ey = py / 2;
-
-		if (ex >= 0 && ex < width && ey >= 0 && ey < height) {
-			int elevation = elevationMap[ex][ey];
-			Vector3i point(px, elevation, py);
-			poissonPoints.push_back(point);
+				if (!tooClose) {
+					poissonSamples.push_back({ x, y });
+				}
+			}
 		}
-	}
-	result["poissonPoints"] = poissonPoints;
 
-	// Convert flatZones → Array<Dictionary>
-	Array flatZonePoints;
-	for (size_t i = 0; i < flatZones.size(); ++i) {
-		int fx = flatZones[i].x;
-		int fy = flatZones[i].y;
-		int elevation = flatZones[i].elevation;
+		/*****************************************************
 
-		Vector3i point(fx, elevation, fy);
-		flatZonePoints.push_back(point);
-	}
-	result["flatZonePoints"] = flatZonePoints;
+			Return's
 
-	// Convert elevationMap → Array<Array<int>>
-	Array elevationArray;
-	for (size_t i = 0; i < elevationMap.size(); ++i) {
-		Array inner;
-		for (size_t j = 0; j < elevationMap[i].size(); ++j) {
-			int val = elevationMap[i][j];
-			inner.push_back(val);
+				Return a dictionary of values needed for object
+				placement
+
+				Return : Elevation Map
+					Necessary for height of objects
+
+				Return : Flat Zones
+					Necessary for placing large stuctures
+
+				Return : Poisson Points
+
+		*****************************************************/
+
+		//TODO : Return data needed for object placement's
+		//TODO : Return flatZones/openArea's
+		//TODO : Return poisson disk sampling results
+
+		Dictionary result;
+
+		// Convert poissonSamples → Array<Vector3i>
+		Array poissonPoints;
+		for (size_t i = 0; i < poissonSamples.size(); ++i) {
+			int px = poissonSamples[i].x;
+			int py = poissonSamples[i].y;
+			int ex = px / 2;
+			int ey = py / 2;
+
+			if (ex >= 0 && ex < width && ey >= 0 && ey < height) {
+				int elevation = elevationMap[ex][ey];
+				Vector3i point(px, elevation, py);
+				poissonPoints.push_back(point);
+			}
 		}
-		elevationArray.push_back(inner);
+		result["poissonPoints"] = poissonPoints;
+
+		// Convert flatZones → Array<Dictionary>
+		Array flatZonePoints;
+		for (size_t i = 0; i < flatZones.size(); ++i) {
+			int fx = flatZones[i].x;
+			int fy = flatZones[i].y;
+			int elevation = flatZones[i].elevation;
+
+			Vector3i point(fx, elevation, fy);
+			flatZonePoints.push_back(point);
+		}
+		result["flatZonePoints"] = flatZonePoints;
+
+		// Convert elevationMap → Array<Array<int>>
+		Array elevationArray;
+		for (size_t i = 0; i < elevationMap.size(); ++i) {
+			Array inner;
+			for (size_t j = 0; j < elevationMap[i].size(); ++j) {
+				int val = elevationMap[i][j];
+				inner.push_back(val);
+			}
+			elevationArray.push_back(inner);
+		}
+		result["elevationMap"] = elevationArray;
+
+		return result;
 	}
-	result["elevationMap"] = elevationArray;
 
-	return result;
-}
-
-void TerrainGen::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "openAreaMin", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
-}
+	void TerrainGen::_bind_methods() {
+		ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "openAreaMin", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
+	}

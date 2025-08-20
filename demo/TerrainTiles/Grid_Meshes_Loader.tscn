@@ -24,6 +24,7 @@ visible = false
 visible = false
 
 [node name="Ramp" parent="." instance=ExtResource("5_0tn13")]
+visible = false
 
 [node name="Ramp_Corner" parent="." instance=ExtResource("6_21lxm")]
 visible = false
