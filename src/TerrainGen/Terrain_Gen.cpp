@@ -1260,9 +1260,9 @@ Dictionary TerrainGen::generate(
 	//
 	// Phase 2 : Determine the Tile's Rotation
 	//
-	// 	Models: ramps/cliffs/water_edge start with HIGH side pointing −Z (NORTH).
-	// 	Corner models start with HIGH at (−Z, +X) i.e., NE corner.
-	// 	Rotation indices: NORTH=0, EAST=16, SOUTH=10, WEST=22
+	// 	Models: Ramp Corner's/ Cliff Corner's / Water Corner's start with HIGH at (−Z, +X)
+	//				i.e., NE corner.
+	//			Ramps / Cliffs / Water Edge's point at -Z (North)
 	//
 	// T = Target Cell / Target Tile
 	// +----+----+----+
@@ -1326,59 +1326,48 @@ Dictionary TerrainGen::generate(
 			int nwTile = safe_tile_at(x - 1, y + 1); // m1
 
 			if (tile_id == RAMP || tile_id == CLIFF || tile_id == WATER_EDGE) {
-				// Point HIGH side toward the highest GROUND neighbor (uphill)
-				float best_diff = -1e9f;
-				if (sTile == GROUND) {
-					float d = float(sHeight) - float(c_height);
-					if (d > best_diff) {
-						best_diff = d;
-						rotation_val = SOUTH;
-					}
-				}
-				if (nTile == GROUND) {
-					float d = float(nHeight) - float(c_height);
-					if (d > best_diff) {
-						best_diff = d;
-						rotation_val = NORTH;
-					}
-				}
-				if (eTile == GROUND) {
-					float d = float(eHeight) - float(c_height);
-					if (d > best_diff) {
-						best_diff = d;
-						rotation_val = EAST;
-					}
-				}
-				if (wTile == GROUND) {
-					float d = float(wHeight) - float(c_height);
-					if (d > best_diff) {
-						best_diff = d;
-						rotation_val = WEST;
-					}
+				// +----+----+----+
+				// | m1 | m2 | m3 |
+				// +----+----+----+
+				// | m4 | T  | m5 |
+				// +----+----+----+
+				// | m6 | m7 | m8 |
+				// +----+----+----+
+
+				// Cardinal's
+				//
+				//	N (m7), E (m5), S (m2), W (m4)
+				//
+				// 	Only two possible combinations an edge piece can be placed
+				//	Since an edge piece must connect from lower elevation to
+				//	higher elevation.
+				//	Thus, m2 + m7 vs m4 + m5
+				//
+				//	Of those two combinations, there is two ways to rotate
+				//
+
+				// North is higher than South
+				// Point to m7
+				if (nHeight == sHeight + 1 && static_cast<TileType>(nTile) == GROUND) {
+					rotation_val = NORTH;
 				}
 
-				// Fallback: if no GROUND neighbor higher, use steepest slope regardless of type
-				if (best_diff <= -1e8f) {
-					float bd = -1e9f;
-					float dN = float(nHeight) - float(c_height);
-					float dS = float(sHeight) - float(c_height);
-					float dE = float(eHeight) - float(c_height);
-					float dW = float(wHeight) - float(c_height);
-					if (dN > bd) {
-						bd = dN;
-					}
-					if (dS > bd) {
-						bd = dS;
-						rotation_val = SOUTH;
-					}
-					if (dE > bd) {
-						bd = dE;
-						rotation_val = EAST;
-					}
-					if (dW > bd) {
-						bd = dW;
-						rotation_val = WEST;
-					}
+				// South is higher than North
+				// Point to m2
+				if (sHeight == nHeight + 1 && static_cast<TileType>(sTile) == GROUND) {
+					rotation_val = SOUTH;
+				}
+
+				// East is higher than West
+				// Point to m5
+				if (eHeight == wHeight + 1 && static_cast<TileType>(eTile) == GROUND) {
+					rotation_val = EAST;
+				}
+
+				// West is higher than East
+				// Point to m4
+				if (wHeight == eHeight + 1 && static_cast<TileType>(wTile) == GROUND) {
+					rotation_val = WEST;
 				}
 			}
 
@@ -1393,10 +1382,9 @@ Dictionary TerrainGen::generate(
 			//
 			// T should consider m2 + m5, m5 + m7, m7 + m4, and m4 + m2; for cliffs and ramps
 			// Then it should find the highest elevation of ground piece at, m3, m8, m6, m1
-			// Then it should decide the rotation by rotating the cliff corner / ramp corner / water corner
-			// toward the higher elevation
+			// Then it should decide the rotation by rotating the corner toward the higher elevation
 			//
-			// Corner meshes: choose the corner defined by edge tiles around T, then aim toward the higher diagonal ground
+			// choose corner defined by edge tiles around T, aim toward the higher diagonal ground
 			//
 			else if (tile_id == RAMP_CORNER || tile_id == CLIFF_CORNER || tile_id == WATER_CORNER) {
 				int ROT_CORNER_NE = WEST;
@@ -1428,8 +1416,6 @@ Dictionary TerrainGen::generate(
 				const bool seGround = (static_cast<TileType>(seTile) == GROUND);
 				const bool swGround = (static_cast<TileType>(swTile) == GROUND);
 				const bool nwGround = (static_cast<TileType>(nwTile) == GROUND);
-
-				// TODO : Find Cardinal Pairs
 
 				// +----+----+----+
 				// | m1 | m2 | m3 |
