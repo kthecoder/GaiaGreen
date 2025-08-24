@@ -32,10 +32,10 @@ Dictionary TerrainGen::generate(
 	//
 	// 	  Produce a 2x Grid for the Data Grid
 	//
-	//TODO Ensure Width & Height are divisable by BlockSize / Error Catching
 	int widthx2 = width * 2;
 	int heightx2 = height * 2;
 
+	// TODO : Fix blocksize so it doesn't cause errors
 	//
 	// Noise Conversion Variables
 	//
@@ -893,6 +893,8 @@ Dictionary TerrainGen::generate(
 			// Cliff's & Ramp's Corner
 			//-------------------------//
 
+			// TODO : Ramp Corner needs a Ground Tile placed one elevation below it
+
 			// Corner EAST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
@@ -1258,6 +1260,8 @@ Dictionary TerrainGen::generate(
 	// }
 
 	//
+	//
+	//
 	// Phase 2 : Determine the Tile's Rotation
 	//
 	// 	Models: Ramp Corner's/ Cliff Corner's / Water Corner's start with HIGH at (−Z, +X)
@@ -1324,6 +1328,15 @@ Dictionary TerrainGen::generate(
 
 			int nwHeight = safe_height(x - 1, y + 1, c_height);
 			int nwTile = safe_tile_at(x - 1, y + 1); // m1
+
+			// +----+----+  +----+----+
+			// | n1 | n2 |  | g1 | r2 |
+			// +----+----+  +----+----+
+			// | n3 | n4 |  | r2 | g2 |
+			// +----+----+  +----+----+
+			//
+			// ? : Above is an edge case that needs fixed
+			// TODO : Replace the Ramps in this situation with CLiff edges using the orientation of the ramp's
 
 			if (tile_id == RAMP || tile_id == CLIFF || tile_id == WATER_EDGE) {
 				// +----+----+----+
@@ -1489,6 +1502,11 @@ Dictionary TerrainGen::generate(
 						rotation_val = NORTH;
 						break;
 				}
+			}
+
+			if (tile_id == RAMP_CORNER) {
+				// Place Ground under Ramp Tiles
+				myGridMap->set_cell_item(Vector3i(x, c_height - 1, y), GROUND, rotation_val);
 			}
 
 			myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, rotation_val);
