@@ -28,6 +28,16 @@ Dictionary TerrainGen::generate(
 	int dx[4] = { 1, -1, 0, 0 };
 	int dy[4] = { 0, 0, 1, -1 };
 
+	if (elevationMax != 0) {
+		int remH = height % elevationMax;
+		if (remH != 0)
+			height += elevationMax - remH;
+
+		int remW = width % elevationMax;
+		if (remW != 0)
+			width += elevationMax - remW;
+	}
+
 	//	Dual Grid System Setup
 	//
 	// 	  Produce a 2x Grid for the Data Grid
@@ -35,13 +45,8 @@ Dictionary TerrainGen::generate(
 	int widthx2 = width * 2;
 	int heightx2 = height * 2;
 
-	// TODO : Fix blocksize so it doesn't cause errors
-	//
-	// Noise Conversion Variables
-	//
-	int blockSize = 4;
-	int reducedX = floor(widthx2 / blockSize);
-	int reducedY = floor(heightx2 / blockSize);
+	int reducedX = floor(widthx2 / elevationMax);
+	int reducedY = floor(heightx2 / elevationMax);
 
 	//
 	// Open Area Tracker
@@ -142,8 +147,8 @@ Dictionary TerrainGen::generate(
 	// Reduce Resolution by sampling one pixel per block
 	for (int x = 0; x < reducedX; x++) {
 		for (int y = 0; y < reducedY; y++) {
-			int sampleX = x * blockSize;
-			int sampleY = y * blockSize;
+			int sampleX = x * elevationMax;
+			int sampleY = y * elevationMax;
 
 			lowResMap[x][y] = heightMap[sampleX][sampleY];
 		}
@@ -160,8 +165,8 @@ Dictionary TerrainGen::generate(
 	// Upscale back to Original Size
 	for (int x = 0; x < widthx2; x++) {
 		for (int y = 0; y < heightx2; y++) {
-			int srcX = x / blockSize;
-			int srcY = y / blockSize;
+			int srcX = x / elevationMax;
+			int srcY = y / elevationMax;
 
 			int elevationValue = lowResMap[srcX][srcY];
 
@@ -893,8 +898,6 @@ Dictionary TerrainGen::generate(
 			// Cliff's & Ramp's Corner
 			//-------------------------//
 
-			// TODO : Ramp Corner needs a Ground Tile placed one elevation below it
-
 			// Corner EAST
 			// +----+----+  +---+---+
 			// | n1 | n2 |  | 1 | 1 |
@@ -1067,199 +1070,6 @@ Dictionary TerrainGen::generate(
 	}
 
 	//
-	// Phase 2 : Determine the Tile's Rotation
-	//
-	//	Tile Rotations are dependent on the surrounding tile types
-	//
-	//
-	// +----+----+----+  +----+----+----+
-	// | m1 | m2 | m3 |  | n1 | n2 | n3 |
-	// +----+----+----+  +----+----+----+
-	// | m4 | c  | m5 |  | n4 | c  | n5 |
-	// +----+----+----+  +----+----+----+
-	// | m6 | m7 | m8 |  | n6 | n7 | n8 |
-	// +----+----+----+  +----+----+----+
-	//
-	// for (int x = 0; x < width; x++) {
-	// 	for (int y = 0; y < height; y++) {
-	// 		int c = elevationMap[y][x];
-	// 		int n = myGridMap->get_cell_item(Vector3i(x, c, y));
-
-	// 		if (n == WATER || n == GROUND) { // Water & Ground Don't need rotations
-	// 			break;
-	// 		}
-
-	// 		auto safe_height = [&](int xx, int yy, int c_height) {
-	// 			if (xx < 0 || yy < 0 || xx >= width || yy >= height)
-	// 				return c_height; // out of bounds → pretend it's the center
-	// 			return elevationMap[xx][yy];
-	// 		};
-
-	// 		int m1 = safe_height(x - 1, y - 1, c);
-	// 		int m2 = safe_height(x - 1, y, c);
-	// 		int m3 = safe_height(x - 1, y + 1, c);
-	// 		int m4 = safe_height(x, y - 1, c);
-	// 		int m5 = safe_height(x, y + 1, c);
-	// 		int m6 = safe_height(x + 1, y - 1, c);
-	// 		int m7 = safe_height(x + 1, y, c);
-	// 		int m8 = safe_height(x + 1, y + 1, c);
-
-	// 		// Empty Cell's return -1
-
-	// 		int n1 = myGridMap->get_cell_item(Vector3i(x, m1, y));
-	// 		int n2 = myGridMap->get_cell_item(Vector3i(x, m2, y));
-	// 		int n3 = myGridMap->get_cell_item(Vector3i(x, m3, y));
-	// 		int n4 = myGridMap->get_cell_item(Vector3i(x, m4, y));
-	// 		int n5 = myGridMap->get_cell_item(Vector3i(x, m5, y));
-	// 		int n6 = myGridMap->get_cell_item(Vector3i(x, m6, y));
-	// 		int n7 = myGridMap->get_cell_item(Vector3i(x, m7, y));
-	// 		int n8 = myGridMap->get_cell_item(Vector3i(x, m8, y));
-
-	// 		// TODO : Determine rotation based on neighbors
-
-	// 		myGridMap->set_cell_item(Vector3i(x, elevationMap[x][y], y), tileMap[x][y], NORTH);
-	// 	}
-	// }
-
-	//
-	// Phase 2 : Determine the Tile's Rotation
-	// Rotations depend on surrounding tile types and elevations.
-	// We point uphill toward the highest GROUND neighbor (cardinals only).
-	//
-	// for (int x = 0; x < width; x++) {
-	// 	for (int y = 0; y < height; y++) {
-	// 		// Current cell elevation and tile id
-	// 		int c_height = elevationMapTiles[x][y];
-	// 		int tile_id = myGridMap->get_cell_item(Vector3i(x, c_height, y));
-
-	// 		// Skip tiles that don't need rotation
-	// 		if (tile_id == WATER || tile_id == GROUND) {
-	// 			continue;
-	// 		}
-
-	// 		// Safe elevation fetch that treats OOB as flat (center height)
-	// 		auto safe_height = [&](int gx, int gy, int fallback_h) {
-	// 			if (gx < 0 || gy < 0 || gx >= width || gy >= height) {
-	// 				return fallback_h;
-	// 			}
-	// 			return elevationMap[gx][gy];
-	// 		};
-
-	// 		// Safe neighbor tile fetch; OOB → -1 (empty)
-	// 		auto safe_tile_at = [&](int gx, int gy) {
-	// 			if (gx < 0 || gy < 0 || gx >= width || gy >= height) {
-	// 				return -1;
-	// 			}
-	// 			int h = elevationMap[gx][gy];
-	// 			return myGridMap->get_cell_item(Vector3i(gx, h, gy));
-	// 		};
-
-	// 		int best_dir = NORTH;
-	// 		float best_diff = -1e9f;
-
-	// 		{
-	// 			int nx = x + 0;
-	// 			int ny = y - 1;
-	// 			int nh = safe_height(nx, ny, c_height);
-	// 			int nt = safe_tile_at(nx, ny);
-	// 			if (nt == GROUND) {
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = SOUTH;
-	// 				}
-	// 			}
-	// 		}
-
-	// 		{
-	// 			int nx = x + 0;
-	// 			int ny = y + 1;
-	// 			int nh = safe_height(nx, ny, c_height);
-	// 			int nt = safe_tile_at(nx, ny);
-	// 			if (nt == GROUND) {
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = NORTH;
-	// 				}
-	// 			}
-	// 		}
-
-	// 		{
-	// 			int nx = x + 1;
-	// 			int ny = y + 0;
-	// 			int nh = safe_height(nx, ny, c_height);
-	// 			int nt = safe_tile_at(nx, ny);
-	// 			if (nt == GROUND) {
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = WEST;
-	// 				}
-	// 			}
-	// 		}
-
-	// 		// WEST (-1, 0)
-	// 		{
-	// 			int nx = x - 1;
-	// 			int ny = y + 0;
-	// 			int nh = safe_height(nx, ny, c_height);
-	// 			int nt = safe_tile_at(nx, ny);
-	// 			if (nt == GROUND) {
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = EAST;
-	// 				}
-	// 			}
-	// 		}
-
-	// 		// If no GROUND neighbor exists, optionally fall back to steepest slope regardless of type
-	// 		if (best_diff <= -1e8f) {
-	// 			// Evaluate all four directions using elevation only
-	// 			{
-	// 				int nx = x + 0, ny = y - 1;
-	// 				int nh = safe_height(nx, ny, c_height);
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = SOUTH;
-	// 				}
-	// 			}
-	// 			{
-	// 				int nx = x + 0, ny = y + 1;
-	// 				int nh = safe_height(nx, ny, c_height);
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = NORTH;
-	// 				}
-	// 			}
-	// 			{
-	// 				int nx = x + 1, ny = y + 0;
-	// 				int nh = safe_height(nx, ny, c_height);
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = WEST;
-	// 				}
-	// 			}
-	// 			{
-	// 				int nx = x - 1, ny = y + 0;
-	// 				int nh = safe_height(nx, ny, c_height);
-	// 				float diff = float(nh) - float(c_height);
-	// 				if (diff > best_diff) {
-	// 					best_diff = diff;
-	// 					best_dir = EAST;
-	// 				}
-	// 			}
-	// 		}
-
-	// 		myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, best_dir);
-	// 	}
-	// }
-
-	//
 	//
 	//
 	// Phase 2 : Determine the Tile's Rotation
@@ -1328,15 +1138,6 @@ Dictionary TerrainGen::generate(
 
 			int nwHeight = safe_height(x - 1, y + 1, c_height);
 			int nwTile = safe_tile_at(x - 1, y + 1); // m1
-
-			// +----+----+  +----+----+
-			// | n1 | n2 |  | g1 | r2 |
-			// +----+----+  +----+----+
-			// | n3 | n4 |  | r2 | g2 |
-			// +----+----+  +----+----+
-			//
-			// ? : Above is an edge case that needs fixed
-			// TODO : Replace the Ramps in this situation with CLiff edges using the orientation of the ramp's
 
 			if (tile_id == RAMP || tile_id == CLIFF || tile_id == WATER_EDGE) {
 				// +----+----+----+
@@ -1510,6 +1311,41 @@ Dictionary TerrainGen::generate(
 			}
 
 			myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, rotation_val);
+
+						// ? : Below is 2 Edge case's that need fixed
+			// TODO : Fix these Edge Case's
+
+			// EDGE CASE : Higher Ground has to connect to Cliffs
+			// nwTile = m1 (n1)  | sTile =  m2 (n2) |  wTile = m4 (n3) | T = tile_id (n4)
+			//
+			// +----+----+  +----+----+ +----+----+    +----+----+
+			// | n1 | n2 |  | g1 | r2 | | r2 | g1 |    | g1 | c2 |
+			// +----+----+  +----+----+ +----+----+ -> +----+----+
+			// | n3 | n4 |  | r2 | g2 | | g2 | r2 |    | c2 | g2 |
+			// +----+----+  +----+----+ +----+----+    +----+----+
+			//
+			if ((nwTile == GROUND && sTile == RAMP && wTile == RAMP && tile_id == GROUND)) {
+				// Get Orientation (Rotation) Value
+				int n1O = myGridMap->get_cell_item_orientation(Vector3i(x - 1, nwHeight, y - 1)); // m1
+				// int n2O = myGridMap->get_cell_item_orientation(Vector3i(x, sHeight, y - 1)); // m2
+				// int n3O = myGridMap->get_cell_item_orientation(Vector3i(x - 1, wHeight, y)); // m4
+				int n4O = myGridMap->get_cell_item_orientation(Vector3i(x, c_height, y)); // Target
+
+				// Set Ramps to Cliffs
+				myGridMap->set_cell_item(Vector3i(x - 1, nwHeight, y - 1), CLIFF, n1O); // n1
+				// myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF, n2O); // n2
+				// myGridMap->set_cell_item(Vector3i(x - 1, wHeight, y), CLIFF, n3O); // n3
+				myGridMap->set_cell_item(Vector3i(x, c_height, y), CLIFF, n4O); // n4
+			}
+
+			// EDGE CASE : Higher Ground has to connect to Cliffs
+			//
+			// +----+----+  +----+----+ +----+----+ +----+----+ +----+----+    +----+----+
+			// | n1 | n2 |  | g1 | c2 | | r2 | g1 | | g2 | r2 | | c2 | g2 |    | g1 | c2 |
+			// +----+----+  +----+----+ +----+----+ +----+----+ +----+----+ -> +----+----+
+			// | n3 | n4 |  | r2 | g2 | | g2 | c2 | | c2 | g1 | | g1 | r2 |    | r2 | c2 |
+			// +----+----+  +----+----+ +----+----+ +----+----+ +----+----+    +----+----+
+			//
 		}
 	}
 
@@ -1618,10 +1454,6 @@ Dictionary TerrainGen::generate(
 			Return : Poisson Points
 
 	*****************************************************/
-
-	//TODO : Return data needed for object placement's
-	//TODO : Return flatZones/openArea's
-	//TODO : Return poisson disk sampling results
 
 	Dictionary result;
 
