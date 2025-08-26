@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://dwe0j28or0dmv"]
+[gd_scene load_steps=11 format=3 uid="uid://dwe0j28or0dmv"]
 
 [ext_resource type="PackedScene" uid="uid://btbwj5dwxmsb5" path="res://TerrainTiles/water.tscn" id="1_psiup"]
 [ext_resource type="PackedScene" uid="uid://bs37de4k1kp6n" path="res://TerrainTiles/water_corner.tscn" id="2_3qame"]
@@ -8,6 +8,8 @@
 [ext_resource type="PackedScene" uid="uid://b4nh8ae0uv4k4" path="res://TerrainTiles/ramp_corner.tscn" id="6_21lxm"]
 [ext_resource type="PackedScene" uid="uid://r3attbe54kel" path="res://TerrainTiles/cliffs.tscn" id="7_1ubri"]
 [ext_resource type="PackedScene" uid="uid://ci3xp1iywxf2o" path="res://TerrainTiles/cliffs_corner.tscn" id="8_2ix0w"]
+[ext_resource type="PackedScene" uid="uid://bnup07coye8fx" path="res://TerrainTiles/Cliff_Corner_Inner.glb" id="9_vsn3x"]
+[ext_resource type="PackedScene" uid="uid://q7oiyh40co85" path="res://TerrainTiles/Water_Corner_Inner.glb" id="10_4p2ei"]
 
 [node name="GridMeshesLoader" type="Node3D"]
 
@@ -27,10 +29,15 @@ visible = false
 visible = false
 
 [node name="Ramp_Corner" parent="." instance=ExtResource("6_21lxm")]
-visible = false
 
 [node name="Cliffs" parent="." instance=ExtResource("7_1ubri")]
 visible = false
 
 [node name="Cliffs_Corner" parent="." instance=ExtResource("8_2ix0w")]
+visible = false
+
+[node name="Cliff_Corner_Inner" parent="." instance=ExtResource("9_vsn3x")]
+visible = false
+
+[node name="Water_Corner_Inner" parent="." instance=ExtResource("10_4p2ei")]
 visible = false

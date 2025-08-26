@@ -1110,7 +1110,19 @@ Dictionary TerrainGen::generate(
 			int rotation_val = NORTH; // default face −Z
 
 			//
+			// +--------------------+---------------+--------------------+
+			// | SW (x - 1 , y - 1) | S (x , y - 1) | SE (x + 1, y - 1)  |
+			// +--------------------+---------------+--------------------+
+			// | W (x - 1 , y)      | T (x,y)       | E (x + 1) , y      |
+			// +--------------------+---------------+--------------------+
+			// | NW (x - 1 , y + 1) | N (x , y + 1) | NE (x + 1 , y + 1) |
+			// +--------------------+---------------+--------------------+
+			//
+			//
+
+			//
 			// Cardinal Neighbors
+			//
 			//
 			int sHeight = safe_height(x, y - 1, c_height);
 			int sTile = safe_tile_at(x, y - 1); // m2
@@ -1163,25 +1175,25 @@ Dictionary TerrainGen::generate(
 				// North is higher than South
 				// Point to m7
 				if (nHeight == sHeight + 1 && static_cast<TileType>(nTile) == GROUND) {
-					rotation_val = NORTH;
+					rotation_val = WEST;
 				}
 
 				// South is higher than North
 				// Point to m2
 				if (sHeight == nHeight + 1 && static_cast<TileType>(sTile) == GROUND) {
-					rotation_val = SOUTH;
+					rotation_val = EAST;
 				}
 
 				// East is higher than West
 				// Point to m5
 				if (eHeight == wHeight + 1 && static_cast<TileType>(eTile) == GROUND) {
-					rotation_val = EAST;
+					rotation_val = NORTH;
 				}
 
 				// West is higher than East
 				// Point to m4
 				if (wHeight == eHeight + 1 && static_cast<TileType>(wTile) == GROUND) {
-					rotation_val = WEST;
+					rotation_val = SOUTH;
 				}
 			}
 
@@ -1201,22 +1213,18 @@ Dictionary TerrainGen::generate(
 			// choose corner defined by edge tiles around T, aim toward the higher diagonal ground
 			//
 			else if (tile_id == RAMP_CORNER || tile_id == CLIFF_CORNER || tile_id == WATER_CORNER) {
-				int ROT_CORNER_NE = WEST;
-				int ROT_CORNER_SE = EAST;
-				int ROT_CORNER_SW = SOUTH;
-				int ROT_CORNER_NW = NORTH;
-
 				auto pos = [](float v) { return v > 0.f ? v : 0.f; };
 
 				// Decide which tile types count as "edge" for the current corner type
 				auto is_edge_for_corner = [&](TileType t) -> bool {
-					if (tile_id == WATER_CORNER) {
-						return t == WATER_EDGE;
-					} else if (tile_id == CLIFF_CORNER) {
-						return t == CLIFF;
-					} else {
-						return t == RAMP;
-					}
+					return t == RAMP || t == WATER_EDGE || t == CLIFF;
+					// if (tile_id == WATER_CORNER) {
+					// 	return t == WATER_EDGE;
+					// } else if (tile_id == CLIFF_CORNER) {
+					// 	return t == CLIFF;
+					// } else {
+					// 	return t == RAMP;
+					// }
 				};
 
 				// Convenience flags for cardinal neighbors
@@ -1238,9 +1246,10 @@ Dictionary TerrainGen::generate(
 				// +----+----+----+
 				// | m6 | m7 | m8 |
 				// +----+----+----+
-
+				//
 				// Diagonal's
 				//
+				// Corner's Higher Elevation Point : South West / m6
 				// NE (m3), SE (m8), SW (m6), NW (m1)
 				// if -1, not ground tile
 				vector<int> dElevation = { -1, -1, -1, -1 };
@@ -1260,19 +1269,19 @@ Dictionary TerrainGen::generate(
 					dElevation[3] = nwHeight;
 				}
 
-				if (!(nEdge && eEdge)) { // m2 + m5 | m3
+				if (!(nEdge && eEdge)) { // m2 + m5 | NOT m3
 					dElevation[0] = -1;
 				}
 
-				if (!(sEdge && eEdge)) { // m5 + m7 | m8
+				if (!(sEdge && eEdge)) { // m5 + m7 | NOT m8
 					dElevation[1] = -1;
 				}
 
-				if (!(sEdge && wEdge)) { // m4 + m7 | m6
+				if (!(sEdge && wEdge)) { // m4 + m7 | NOT m6
 					dElevation[2] = -1;
 				}
 
-				if (!(nEdge && wEdge)) { // m4 + m2 | m1
+				if (!(nEdge && wEdge)) { // m4 + m2 | NOT m1
 					dElevation[3] = -1;
 				}
 
@@ -1288,16 +1297,16 @@ Dictionary TerrainGen::generate(
 
 				switch (dEleIndex) {
 					case 0:
-						rotation_val = EAST;
-						break;
-					case 1:
-						rotation_val = SOUTH;
-						break;
-					case 2:
 						rotation_val = WEST;
 						break;
-					case 3:
+					case 1:
 						rotation_val = NORTH;
+						break;
+					case 2:
+						rotation_val = EAST;
+						break;
+					case 3:
+						rotation_val = SOUTH;
 						break;
 					default:
 						rotation_val = NORTH;
@@ -1312,7 +1321,7 @@ Dictionary TerrainGen::generate(
 
 			myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, rotation_val);
 
-						// ? : Below is 2 Edge case's that need fixed
+			// ? : Below is 2 Edge case's that need fixed
 			// TODO : Fix these Edge Case's
 
 			// EDGE CASE : Higher Ground has to connect to Cliffs

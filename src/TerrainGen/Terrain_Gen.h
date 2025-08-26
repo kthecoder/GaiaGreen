@@ -37,7 +37,16 @@ protected:
 		RAMP, // Ground to Ground tile of 45 degree angle, Connects ground tiles for elevation changes
 		RAMP_CORNER, // Connector of ramps and cliffs on its corners, Connects to Ground tiles and can be next to cliffs
 		CLIFF, // Cliffs separate elevation and on its sides can connect to cliffs & ramps, Connects to ground tiles & Water Edge for elevation changes
-		CLIFF_CORNER // Connector of ramps and cliffs on its corners, Connects to Ground & Water edge tiles, can also be next to Ramps
+		CLIFF_CORNER, // Connector of ramps and cliffs on its corners, Connects to Ground & Water edge tiles, can also be next to Ramps
+		// +----+----+
+		// | n1 | n2 |
+		// +----+----+
+		// | n3 | n4 |
+		// +----+----+
+		//
+		// n1 = GROUND elevation 1, n2 = CLIFF_EDGE elevation 2, n3 = CLIFF_EDGE elevation 2, n4 = CLIFF_CORNER_INNER elevation 2
+		CLIFF_CORNER_INNER, // Connector for when two cliff edge's connect inward
+		WATER_CORNER_INNER // Connector for when two water edge's connect inward
 	};
 
 	Ref<FastNoiseLite> noise;
