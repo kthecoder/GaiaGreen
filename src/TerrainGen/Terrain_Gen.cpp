@@ -494,7 +494,7 @@ Dictionary TerrainGen::generate(
 
 	for (int x = 1; x < widthx2 - 1; x++) {
 		for (int y = 1; y < heightx2 - 1; y++) {
-			float currentElevation = rawNoise[x][y];
+			float currentElevation = heightMap[x][y];
 			float lowestElevation = currentElevation;
 			int targetX = x;
 			int targetY = y;
@@ -507,7 +507,7 @@ Dictionary TerrainGen::generate(
 
 					int nx = x + dx;
 					int ny = y + dy;
-					float neighborElevation = rawNoise[nx][ny];
+					float neighborElevation = heightMap[nx][ny];
 
 					if (neighborElevation < lowestElevation) {
 						lowestElevation = neighborElevation;
@@ -1217,14 +1217,13 @@ Dictionary TerrainGen::generate(
 
 				// Decide which tile types count as "edge" for the current corner type
 				auto is_edge_for_corner = [&](TileType t) -> bool {
-					return t == RAMP || t == WATER_EDGE || t == CLIFF;
-					// if (tile_id == WATER_CORNER) {
-					// 	return t == WATER_EDGE;
-					// } else if (tile_id == CLIFF_CORNER) {
-					// 	return t == CLIFF;
-					// } else {
-					// 	return t == RAMP;
-					// }
+					if (tile_id == WATER_CORNER) {
+						return t == WATER_EDGE;
+					} else if (tile_id == CLIFF_CORNER) {
+						return t == CLIFF;
+					} else {
+						return t == RAMP;
+					}
 				};
 
 				// Convenience flags for cardinal neighbors
