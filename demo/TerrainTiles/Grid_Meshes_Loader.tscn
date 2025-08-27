@@ -9,7 +9,7 @@
 [ext_resource type="PackedScene" uid="uid://r3attbe54kel" path="res://TerrainTiles/cliffs.tscn" id="7_1ubri"]
 [ext_resource type="PackedScene" uid="uid://ci3xp1iywxf2o" path="res://TerrainTiles/cliffs_corner.tscn" id="8_2ix0w"]
 [ext_resource type="PackedScene" uid="uid://bnup07coye8fx" path="res://TerrainTiles/Cliff_Corner_Inner.glb" id="9_vsn3x"]
-[ext_resource type="PackedScene" uid="uid://q7oiyh40co85" path="res://TerrainTiles/Water_Corner_Inner.glb" id="10_4p2ei"]
+[ext_resource type="PackedScene" uid="uid://dy7je7lfyqw1y" path="res://TerrainTiles/Water_Corner_Inner.glb" id="10_4p2ei"]
 
 [node name="GridMeshesLoader" type="Node3D"]
 
@@ -29,6 +29,7 @@ visible = false
 visible = false
 
 [node name="Ramp_Corner" parent="." instance=ExtResource("6_21lxm")]
+visible = false
 
 [node name="Cliffs" parent="." instance=ExtResource("7_1ubri")]
 visible = false

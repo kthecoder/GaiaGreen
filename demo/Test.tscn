@@ -23,7 +23,7 @@ cell_size = Vector3(1, 0.25, 1)
 data = {
 "cells": PackedInt32Array(65546, 2, 1048588, 65547, 1, 655372)
 }
-metadata/_editor_floor_ = Vector3(0, 1, 0)
+metadata/_editor_floor_ = Vector3(0, 0, 0)
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 22.3218, 36.7455)

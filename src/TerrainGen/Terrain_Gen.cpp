@@ -309,9 +309,8 @@ Dictionary TerrainGen::generate(
 				(Cardinal Neighbors Only)
 
 	*****************************************************/
-	int neighborRadius = 1; // 3x3 neighborhood (cardinal only)
 	int threshold = 2; // Minimum matching neighbors to preserve center
-	int iterations = 1; // Number of CA generations to apply
+	int iterations = 2; // Number of CA generations to apply
 
 	vector<vector<int>> curr = heightMap;
 	vector<vector<int>> next = heightMap;
@@ -320,6 +319,24 @@ Dictionary TerrainGen::generate(
 	const vector<pair<int, int>> cardinalDirs = {
 		{ 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 }
 	};
+
+	// Height Map is a double grid
+	// +----+----+----+----+
+	// | z1 | z2 | y1 | y2 |
+	// +----+----+----+----+
+	// | z3 | z4 | y3 | y5 |
+	// +----+----+----+----+
+	// | x1 | x2 | w1 | w2 |
+	// +----+----+----+----+
+	// | x3 | x4 | w3 | w4 |
+	// +----+----+----+----+
+	//
+	// Eventually the map will be reduced to :
+	// +----+----+
+	// | z  | y  |
+	// +----+----+
+	// | x  | w  |
+	// +----+----+
 
 	for (int it = 0; it < iterations; ++it) {
 		bool anyChanged = false;
@@ -395,6 +412,8 @@ Dictionary TerrainGen::generate(
 
 	*****************************************************/
 
+	int caCcount = 2;
+
 	if (waterRemoval >= 10.0f) {
 		// Clamp percentage
 		if (waterRemoval > 100.0f)
@@ -402,73 +421,75 @@ Dictionary TerrainGen::generate(
 		if (waterRemoval < 0.0f)
 			waterRemoval = 0.0f;
 
-		vector<vector<bool>> visited(heightx2, vector<bool>(widthx2, false));
+		for (int iter = 0; iter < caCcount; iter++) {
+			vector<vector<bool>> visited(heightx2, vector<bool>(widthx2, false));
 
-		for (int y = 0; y < heightx2; y++) {
-			for (int x = 0; x < widthx2; x++) {
-				if (heightMap[y][x] != 0 || visited[y][x])
-					continue;
+			for (int y = 0; y < heightx2; y++) {
+				for (int x = 0; x < widthx2; x++) {
+					if (heightMap[y][x] != 0 || visited[y][x])
+						continue;
 
-				// Manual stack flood fill
-				vector<pair<int, int>> stack;
-				vector<pair<int, int>> region;
-				stack.push_back(make_pair(x, y));
-				visited[y][x] = true;
+					// Manual stack flood fill
+					vector<pair<int, int>> stack;
+					vector<pair<int, int>> region;
+					stack.push_back(make_pair(x, y));
+					visited[y][x] = true;
 
-				while (!stack.empty()) {
-					pair<int, int> current = stack.back();
-					stack.pop_back();
-					int cx = current.first;
-					int cy = current.second;
-					region.push_back(current);
+					while (!stack.empty()) {
+						pair<int, int> current = stack.back();
+						stack.pop_back();
+						int cx = current.first;
+						int cy = current.second;
+						region.push_back(current);
 
-					for (int d = 0; d < 4; d++) {
-						int nx = cx + dx[d];
-						int ny = cy + dy[d];
-						if (nx < 0 || ny < 0 || nx >= widthx2 || ny >= heightx2)
-							continue;
-						if (visited[ny][nx])
-							continue;
-						if (heightMap[ny][nx] != 0)
-							continue;
-						visited[ny][nx] = true;
-						stack.push_back(make_pair(nx, ny));
-					}
-				}
-
-				// Determine how many cells to flip
-				int regionSize = region.size();
-				int toFlip = (int)(regionSize * (waterRemoval / 100.0f));
-				if (toFlip <= 0)
-					continue;
-
-				// Rank by proximity to edge
-				vector<pair<int, pair<int, int>>> candidates;
-				for (int i = 0; i < regionSize; i++) {
-					int rx = region[i].first;
-					int ry = region[i].second;
-					int distX = min(rx, widthx2 - 1 - rx);
-					int distY = min(ry, heightx2 - 1 - ry);
-					int edgeDist = min(distX, distY);
-					candidates.push_back(make_pair(edgeDist, region[i]));
-				}
-
-				// Bubble sort
-				for (int i = 0; i < (int)candidates.size(); i++) {
-					for (int j = i + 1; j < (int)candidates.size(); j++) {
-						if (candidates[j].first < candidates[i].first) {
-							pair<int, pair<int, int>> temp = candidates[i];
-							candidates[i] = candidates[j];
-							candidates[j] = temp;
+						for (int d = 0; d < 4; d++) {
+							int nx = cx + dx[d];
+							int ny = cy + dy[d];
+							if (nx < 0 || ny < 0 || nx >= widthx2 || ny >= heightx2)
+								continue;
+							if (visited[ny][nx])
+								continue;
+							if (heightMap[ny][nx] != 0)
+								continue;
+							visited[ny][nx] = true;
+							stack.push_back(make_pair(nx, ny));
 						}
 					}
-				}
 
-				// Flip top N water cells to land
-				for (int i = 0; i < toFlip && i < (int)candidates.size(); i++) {
-					int fx = candidates[i].second.first;
-					int fy = candidates[i].second.second;
-					heightMap[fy][fx] = 1;
+					// Determine how many cells to flip
+					int regionSize = region.size();
+					int toFlip = (int)(regionSize * (waterRemoval / 100.0f));
+					if (toFlip <= 0)
+						continue;
+
+					// Rank by proximity to edge
+					vector<pair<int, pair<int, int>>> candidates;
+					for (int i = 0; i < regionSize; i++) {
+						int rx = region[i].first;
+						int ry = region[i].second;
+						int distX = min(rx, widthx2 - 1 - rx);
+						int distY = min(ry, heightx2 - 1 - ry);
+						int edgeDist = min(distX, distY);
+						candidates.push_back(make_pair(edgeDist, region[i]));
+					}
+
+					// Bubble sort
+					for (int i = 0; i < (int)candidates.size(); i++) {
+						for (int j = i + 1; j < (int)candidates.size(); j++) {
+							if (candidates[j].first < candidates[i].first) {
+								pair<int, pair<int, int>> temp = candidates[i];
+								candidates[i] = candidates[j];
+								candidates[j] = temp;
+							}
+						}
+					}
+
+					// Flip top N water cells to land
+					for (int i = 0; i < toFlip && i < (int)candidates.size(); i++) {
+						int fx = candidates[i].second.first;
+						int fy = candidates[i].second.second;
+						heightMap[fy][fx] = 1;
+					}
 				}
 			}
 		}
@@ -798,7 +819,7 @@ Dictionary TerrainGen::generate(
 			// | n3 | n4 |  | 1 | 1 |  | 2 | 2 |
 			// +----+----+  +---+---+  +---+---+
 			//
-			if (n1 == n2 && n2 == n3 && n3 == n4 && n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0) {
+			if (n1 == n2 && n2 == n3 && n3 == n4 && n1 == n4 && n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0) {
 				tileMap[x][y] = GROUND;
 			}
 
@@ -1072,7 +1093,9 @@ Dictionary TerrainGen::generate(
 	//
 	//
 	//
-	// Phase 2 : Determine the Tile's Rotation
+	// Phase 2 : Corrections & Rotations
+	//
+	//  Description: Determine the Tile's Rotation and correct tiles
 	//
 	// 	Models: Ramp Corner's/ Cliff Corner's / Water Corner's start with HIGH at (−Z, +X)
 	//				i.e., NE corner.
@@ -1087,11 +1110,12 @@ Dictionary TerrainGen::generate(
 	// | m6 | m7 | m8 |
 	// +----+----+----+
 	//
+
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
 			int c_height = elevationMap[x][y];
 			int tile_id = myGridMap->get_cell_item(Vector3i(x, c_height, y));
-			if (tile_id == -1 || tile_id == WATER || tile_id == GROUND)
+			if (tile_id == -1 || tile_id == GROUND)
 				continue;
 
 			auto in_bounds = [&](int gx, int gy) {
@@ -1105,6 +1129,10 @@ Dictionary TerrainGen::generate(
 					return -1;
 				int h = elevationMap[gx][gy];
 				return myGridMap->get_cell_item(Vector3i(gx, h, gy));
+			};
+
+			auto isWaterLike = [&](TileType t) {
+				return t == WATER || t == WATER_EDGE || t == WATER_CORNER || t == WATER_CORNER_INNER;
 			};
 
 			int rotation_val = NORTH; // default face −Z
@@ -1150,6 +1178,31 @@ Dictionary TerrainGen::generate(
 
 			int nwHeight = safe_height(x - 1, y + 1, c_height);
 			int nwTile = safe_tile_at(x - 1, y + 1); // m1
+
+			//
+			// Water Tiles
+			//
+
+			bool nWater = isWaterLike(static_cast<TileType>(nTile));
+			bool sWater = isWaterLike(static_cast<TileType>(sTile));
+			bool eWater = isWaterLike(static_cast<TileType>(eTile));
+			bool wWater = isWaterLike(static_cast<TileType>(wTile));
+			bool neWater = isWaterLike(static_cast<TileType>(neTile));
+			bool nwWater = isWaterLike(static_cast<TileType>(nwTile));
+			bool seWater = isWaterLike(static_cast<TileType>(seTile));
+			bool swWater = isWaterLike(static_cast<TileType>(swTile));
+
+			if (isWaterLike(static_cast<TileType>(tile_id))) {
+				int waterNeighbors =
+						nWater + sWater + eWater + wWater +
+						neWater + nwWater + seWater + swWater;
+
+				// Fully surrounded by water
+				if (waterNeighbors == 8) {
+					tile_id = WATER;
+					rotation_val = 0;
+				}
+			}
 
 			if (tile_id == RAMP || tile_id == CLIFF || tile_id == WATER_EDGE) {
 				// +----+----+----+
