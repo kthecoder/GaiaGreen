@@ -874,44 +874,46 @@ Dictionary TerrainGen::generate(
 			// Water Corners
 			//-------------------------//
 
+			// TODO : Water Corner's Logic is incorrect
+
 			// Water's Corner WEST
 			// +----+----+  +---+---+
-			// | n1 | n2 |  | 0 | 0 |
+			// | n1 | n2 |  | 0 | 1 |
 			// +----+----+  +---+---+
-			// | n3 | n4 |  | 0 | 1 |
+			// | n3 | n4 |  | 1 | 1 |
 			// +----+----+  +---+---+
 			//
-			if (n1 == 0 && n2 == 0 && n3 == 0 && n4 > 0) {
+			if (n1 == 0 && n2 > 0 && n3 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_CORNER;
 			}
 			// Water's Corner EAST
 			// +----+----+  +---+---+
-			// | n1 | n2 |  | 1 | 0 |
-			// +----+----+  +---+---+
-			// | n3 | n4 |  | 0 | 0 |
-			// +----+----+  +---+---+
-			//
-			else if (n1 > 0 && n2 == 0 && n3 == 0 && n4 == 0) {
-				tileMap[x][y] = WATER_CORNER;
-			}
-			// Water's Corner SOUTH
-			// +----+----+  +---+---+
-			// | n1 | n2 |  | 0 | 1 |
-			// +----+----+  +---+---+
-			// | n3 | n4 |  | 0 | 0 |
-			// +----+----+  +---+---+
-			//
-			else if (n1 == 0 && n2 > 0 && n3 == 0 && n4 == 0) {
-				tileMap[x][y] = WATER_CORNER;
-			}
-			// Water's Corner NORTH
-			// +----+----+  +---+---+
-			// | n1 | n2 |  | 0 | 0 |
+			// | n1 | n2 |  | 1 | 1 |
 			// +----+----+  +---+---+
 			// | n3 | n4 |  | 1 | 0 |
 			// +----+----+  +---+---+
 			//
-			else if (n1 == 0 && n2 == 0 && n3 > 0 && n4 == 0) {
+			else if (n4 == 0 && n1 > 0 && n2 > 0 && n3 > 0) {
+				tileMap[x][y] = WATER_CORNER;
+			}
+			// Water's Corner SOUTH
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 1 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 0 | 1 |
+			// +----+----+  +---+---+
+			//
+			else if (n3 == 0 && n1 > 0 && n2 > 0 && n4 > 0) {
+				tileMap[x][y] = WATER_CORNER;
+			}
+			// Water's Corner NORTH
+			// +----+----+  +---+---+
+			// | n1 | n2 |  | 1 | 0 |
+			// +----+----+  +---+---+
+			// | n3 | n4 |  | 1 | 1 |
+			// +----+----+  +---+---+
+			//
+			else if (n2 == 0 && n1 > 0 && n3 > 0 && n4 > 0) {
 				tileMap[x][y] = WATER_CORNER;
 			}
 
@@ -966,9 +968,9 @@ Dictionary TerrainGen::generate(
 			}
 			// Corner SOUTH
 			// +----+----+  +---+---+
-			// | n1 | n2 |  | 0 | 0 |
+			// | n1 | n2 |  | 1 | 1 |
 			// +----+----+  +---+---+
-			// | n3 | n4 |  | 1 | 0 |
+			// | n3 | n4 |  | 2 | 1 |
 			// +----+----+  +---+---+
 			//
 			else if (n1 > 0 && n2 > 0 && n3 > 0 && n4 > 0 && n3 > n1 && n3 > n2 && n3 > n4) {
@@ -1270,13 +1272,14 @@ Dictionary TerrainGen::generate(
 
 				// Decide which tile types count as "edge" for the current corner type
 				auto is_edge_for_corner = [&](TileType t) -> bool {
-					if (tile_id == WATER_CORNER) {
-						return t == WATER_EDGE;
-					} else if (tile_id == CLIFF_CORNER) {
-						return t == CLIFF;
-					} else {
-						return t == RAMP;
-					}
+					return t == CLIFF || t == RAMP || t == WATER_EDGE;
+					// if (tile_id == WATER_CORNER) {
+					// 	return t == WATER_EDGE;
+					// } else if (tile_id == CLIFF_CORNER) {
+					// 	return t == CLIFF;
+					// } else {
+					// 	return t == RAMP;
+					// }
 				};
 
 				// Convenience flags for cardinal neighbors
@@ -1304,65 +1307,48 @@ Dictionary TerrainGen::generate(
 				// Corner's Higher Elevation Point : South West / m6
 				// NE (m3), SE (m8), SW (m6), NW (m1)
 				// if -1, not ground tile
-				vector<int> dElevation = { -1, -1, -1, -1 };
-				if (neGround) {
-					dElevation[0] = neHeight;
-				}
+				//
+				// Corner Edge Tiles Start pointing (-x,+z) SW
+				// No clue why different tiles are requiring different ROT/Orientation values
 
-				if (seGround) {
-					dElevation[1] = seHeight;
-				}
-
-				if (swGround) {
-					dElevation[2] = swHeight;
-				}
-
-				if (nwGround) {
-					dElevation[3] = nwHeight;
-				}
-
-				if (!(nEdge && eEdge)) { // m2 + m5 | NOT m3
-					dElevation[0] = -1;
-				}
-
-				if (!(sEdge && eEdge)) { // m5 + m7 | NOT m8
-					dElevation[1] = -1;
-				}
-
-				if (!(sEdge && wEdge)) { // m4 + m7 | NOT m6
-					dElevation[2] = -1;
-				}
-
-				if (!(nEdge && wEdge)) { // m4 + m2 | NOT m1
-					dElevation[3] = -1;
-				}
-
-				int maxElevation = dElevation[0];
-				int dEleIndex = 0;
-
-				for (size_t i = 1; i < dElevation.size(); ++i) {
-					if (dElevation[i] > maxElevation) {
-						maxElevation = dElevation[i];
-						dEleIndex = static_cast<int>(i);
-					}
-				}
-
-				switch (dEleIndex) {
-					case 0:
+				// North East
+				if (nEdge && eEdge && !sEdge && !wEdge) { // m2 + m5 | NOT m3
+					if (tile_id == CLIFF_CORNER)
 						rotation_val = WEST;
-						break;
-					case 1:
-						rotation_val = NORTH;
-						break;
-					case 2:
+					if (tile_id == RAMP_CORNER)
 						rotation_val = EAST;
-						break;
-					case 3:
-						rotation_val = SOUTH;
-						break;
-					default:
+					if (tile_id == WATER_CORNER)
+						rotation_val = EAST;
+				}
+
+				// South East
+				if (sEdge && eEdge && !nEdge && !wEdge) { // m5 + m7 | NOT m8
+					if (tile_id == CLIFF_CORNER)
 						rotation_val = NORTH;
-						break;
+					if (tile_id == RAMP_CORNER)
+						rotation_val = SOUTH;
+					if (tile_id == WATER_CORNER)
+						rotation_val = SOUTH;
+				}
+
+				// South West
+				if (sEdge && wEdge && !nEdge && !eEdge) { // m4 + m7 | NOT m6
+					if (tile_id == CLIFF_CORNER)
+						rotation_val = EAST;
+					if (tile_id == RAMP_CORNER)
+						rotation_val = WEST;
+					if (tile_id == WATER_CORNER)
+						rotation_val = WEST;
+				}
+
+				// North West
+				if (nEdge && wEdge && !sEdge && !eEdge) { // m4 + m2 | NOT m1
+					if (tile_id == CLIFF_CORNER)
+						rotation_val = SOUTH;
+					if (tile_id == RAMP_CORNER)
+						rotation_val = NORTH;
+					if (tile_id == WATER_CORNER)
+						rotation_val = NORTH;
 				}
 			}
 
@@ -1407,6 +1393,9 @@ Dictionary TerrainGen::generate(
 			// | n3 | n4 |  | r2 | g2 | | g2 | c2 | | c2 | g1 | | g1 | r2 |    | r2 | c2 |
 			// +----+----+  +----+----+ +----+----+ +----+----+ +----+----+    +----+----+
 			//
+
+			// EDGE CASE : Ramps surround a Ramp tile
+			// Two higher ramps and two lower ramps with a ramp tile in the center
 		}
 	}
 
