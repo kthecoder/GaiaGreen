@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://cs6xj3i70yh0f"]
+[gd_scene load_steps=10 format=3 uid="uid://cs6xj3i70yh0f"]
 
 [ext_resource type="Script" uid="uid://ba0phkf16vg6l" path="res://terrain_gen_script.gd" id="1_myinc"]
 [ext_resource type="MeshLibrary" uid="uid://bubhdqje2s6rn" path="res://TerrainTiles/3D_Terrain_Tiles.tres" id="2_njov2"]
@@ -6,10 +6,24 @@
 
 [sub_resource type="Environment" id="Environment_njov2"]
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2au82"]
+albedo_color = Color(0.633333, 0, 1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_8tn2x"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_aq4fw"]
+albedo_color = Color(1, 0, 0.0166664, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ivycn"]
+albedo_color = Color(0, 1, 0.183333, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_q1uvj"]
+albedo_color = Color(0, 0.3, 1, 1)
+
 [node name="Test" type="Node3D"]
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.00963406, 0.999954, 0, -0.999954, 0.00963406, 0, 2.1677, 0)
+transform = Transform3D(1, 0, 0, 0, 0.00963406, 0.999954, 0, -0.999954, 0.00963406, 46.8027, 2.1677, 53.3998)
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_njov2")
@@ -28,3 +42,23 @@ metadata/_editor_floor_ = Vector3(0, 0, 0)
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 22.3218, 36.7455)
 script = ExtResource("3_2au82")
+
+[node name="-X" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 42.3511, 5.07252, 53.3998)
+material_override = SubResource("StandardMaterial3D_2au82")
+mesh = SubResource("BoxMesh_8tn2x")
+
+[node name="X" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50.372, 5.07252, 53.3998)
+material_override = SubResource("StandardMaterial3D_aq4fw")
+mesh = SubResource("BoxMesh_8tn2x")
+
+[node name="-Z" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45.9526, 5.07252, 48.5286)
+material_override = SubResource("StandardMaterial3D_ivycn")
+mesh = SubResource("BoxMesh_8tn2x")
+
+[node name="Z" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45.9526, 5.07252, 56.6065)
+material_override = SubResource("StandardMaterial3D_q1uvj")
+mesh = SubResource("BoxMesh_8tn2x")

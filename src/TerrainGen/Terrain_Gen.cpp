@@ -1115,8 +1115,8 @@ Dictionary TerrainGen::generate(
 
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
-			int c_height = elevationMap[x][y];
-			int tile_id = myGridMap->get_cell_item(Vector3i(x, c_height, y));
+			int t_height = elevationMap[x][y];
+			int tile_id = myGridMap->get_cell_item(Vector3i(x, t_height, y));
 			if (tile_id == -1 || tile_id == GROUND)
 				continue;
 
@@ -1141,44 +1141,75 @@ Dictionary TerrainGen::generate(
 
 			//
 			// +--------------------+---------------+--------------------+
-			// | SW (x - 1 , y - 1) | S (x , y - 1) | SE (x + 1, y - 1)  |
+			// | NE (x - 1 , y - 1) | E (x , y - 1) | SE (x + 1, y - 1)  |
 			// +--------------------+---------------+--------------------+
-			// | W (x - 1 , y)      | T (x,y)       | E (x + 1) , y      |
+			// | N (x - 1 , y)      | T (x,y)       | S (x + 1) , y      |
 			// +--------------------+---------------+--------------------+
-			// | NW (x - 1 , y + 1) | N (x , y + 1) | NE (x + 1 , y + 1) |
+			// | NW (x - 1 , y + 1) | W (x , y + 1) | SW (x + 1 , y + 1) |
 			// +--------------------+---------------+--------------------+
 			//
+			// +----+----+----+ +----+----+----+
+			// | m1 | m2 | m3 | | NE | E  | SE |
+			// +----+----+----+ +----+----+----+
+			// | m4 | T  | m5 | | N  | T  | S  |
+			// +----+----+----+ +----+----+----+
+			// | m6 | m7 | m8 | | NW | W  | SW |
+			// +----+----+----+ +----+----+----+
 			//
 
 			//
 			// Cardinal Neighbors
 			//
 			//
-			int sHeight = safe_height(x, y - 1, c_height);
-			int sTile = safe_tile_at(x, y - 1); // m2
+			// int nHeight = safe_height(x, y + 1, t_height);
+			// int nTile = safe_tile_at(x, y + 1); // m7
 
-			int nHeight = safe_height(x, y + 1, c_height);
+			// int eHeight = safe_height(x + 1, y, t_height);
+			// int eTile = safe_tile_at(x + 1, y); // m5
+
+			// int sHeight = safe_height(x, y - 1, t_height);
+			// int sTile = safe_tile_at(x, y - 1); // m2
+
+			// int wHeight = safe_height(x - 1, y, t_height);
+			// int wTile = safe_tile_at(x - 1, y); // m4
+
+			int nHeight = safe_height(x, y + 1, t_height);
 			int nTile = safe_tile_at(x, y + 1); // m7
 
-			int eHeight = safe_height(x + 1, y, c_height);
+			int eHeight = safe_height(x + 1, y, t_height);
 			int eTile = safe_tile_at(x + 1, y); // m5
 
-			int wHeight = safe_height(x - 1, y, c_height);
+			int sHeight = safe_height(x, y - 1, t_height);
+			int sTile = safe_tile_at(x, y - 1); // m2
+
+			int wHeight = safe_height(x - 1, y, t_height);
 			int wTile = safe_tile_at(x - 1, y); // m4
 
 			//
 			// Diagonal Neighbors
 			//
-			int neHeight = safe_height(x + 1, y + 1, c_height);
+			// int neHeight = safe_height(x + 1, y + 1, t_height);
+			// int neTile = safe_tile_at(x + 1, y + 1); // m3
+
+			// int seHeight = safe_height(x + 1, y - 1, t_height);
+			// int seTile = safe_tile_at(x + 1, y - 1); // m8
+
+			// int swHeight = safe_height(x - 1, y - 1, t_height);
+			// int swTile = safe_tile_at(x - 1, y - 1); // m6
+
+			// int nwHeight = safe_height(x - 1, y + 1, t_height);
+			// int nwTile = safe_tile_at(x - 1, y + 1); // m1
+
+			int neHeight = safe_height(x + 1, y + 1, t_height);
 			int neTile = safe_tile_at(x + 1, y + 1); // m3
 
-			int seHeight = safe_height(x + 1, y - 1, c_height);
+			int seHeight = safe_height(x + 1, y - 1, t_height);
 			int seTile = safe_tile_at(x + 1, y - 1); // m8
 
-			int swHeight = safe_height(x - 1, y - 1, c_height);
+			int swHeight = safe_height(x - 1, y - 1, t_height);
 			int swTile = safe_tile_at(x - 1, y - 1); // m6
 
-			int nwHeight = safe_height(x - 1, y + 1, c_height);
+			int nwHeight = safe_height(x - 1, y + 1, t_height);
 			int nwTile = safe_tile_at(x - 1, y + 1); // m1
 
 			//
@@ -1354,36 +1385,133 @@ Dictionary TerrainGen::generate(
 
 			if (tile_id == RAMP_CORNER) {
 				// Place Ground under Ramp Tiles
-				myGridMap->set_cell_item(Vector3i(x, c_height - 1, y), GROUND, rotation_val);
+				myGridMap->set_cell_item(Vector3i(x, t_height - 1, y), GROUND, rotation_val);
 			}
 
-			myGridMap->set_cell_item(Vector3i(x, c_height, y), tile_id, rotation_val);
+			myGridMap->set_cell_item(Vector3i(x, t_height, y), tile_id, rotation_val);
 
 			// ? : Below is 2 Edge case's that need fixed
 			// TODO : Fix these Edge Case's
 
-			// EDGE CASE : Higher Ground has to connect to Cliffs
-			// nwTile = m1 (n1)  | sTile =  m2 (n2) |  wTile = m4 (n3) | T = tile_id (n4)
+			/*****************************************************
+
+				EDGE CASE FIX :
+
+					Floating Ground Tile Fix
+
+			*****************************************************/
+
+			// EDGE CASE : Higher Ground has to connect to Cliffs 1
 			//
-			// +----+----+  +----+----+ +----+----+    +----+----+
-			// | n1 | n2 |  | g1 | r2 | | r2 | g1 |    | g1 | c2 |
-			// +----+----+  +----+----+ +----+----+ -> +----+----+
-			// | n3 | n4 |  | r2 | g2 | | g2 | r2 |    | c2 | g2 |
-			// +----+----+  +----+----+ +----+----+    +----+----+
+			// +--------------------+---------------+--------------------+
+			// | NE (x - 1 , y - 1) | E (x , y - 1) | SE (x + 1, y - 1)  |
+			// +--------------------+---------------+--------------------+
+			// | N (x - 1 , y)      | T (x,y)       | S (x + 1) , y      |
+			// +--------------------+---------------+--------------------+
+			// | NW (x - 1 , y + 1) | W (x , y + 1) | SW (x + 1 , y + 1) |
+			// +--------------------+---------------+--------------------+
 			//
-			if ((nwTile == GROUND && sTile == RAMP && wTile == RAMP && tile_id == GROUND)) {
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m1 | m2 | m3 | | G  | R  | X  | | R  | G  | X  |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m4 | T  | m5 | | R  | G  | X  | | G  | R  | X  |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m6 | m7 | m8 | | X  | X  | X  | | X  | X  | X  |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			//
+
+			if ((swTile == GROUND && sTile == RAMP && wTile == RAMP && tile_id == GROUND)) {
+				// Set Floating Ground to Cliff Corner
+				if (swHeight > t_height) {
+					myGridMap->set_cell_item(Vector3i(x - 1, swHeight, y - 1), CLIFF_CORNER, WEST); // m1
+				} else {
+					myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF_CORNER, EAST); // T
+				}
+
 				// Get Orientation (Rotation) Value
-				int n1O = myGridMap->get_cell_item_orientation(Vector3i(x - 1, nwHeight, y - 1)); // m1
-				// int n2O = myGridMap->get_cell_item_orientation(Vector3i(x, sHeight, y - 1)); // m2
-				// int n3O = myGridMap->get_cell_item_orientation(Vector3i(x - 1, wHeight, y)); // m4
-				int n4O = myGridMap->get_cell_item_orientation(Vector3i(x, c_height, y)); // Target
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x, sHeight, y - 1)); // m2
+				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x - 1, wHeight, y)); // m4
 
 				// Set Ramps to Cliffs
-				myGridMap->set_cell_item(Vector3i(x - 1, nwHeight, y - 1), CLIFF, n1O); // n1
-				// myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF, n2O); // n2
-				// myGridMap->set_cell_item(Vector3i(x - 1, wHeight, y), CLIFF, n3O); // n3
-				myGridMap->set_cell_item(Vector3i(x, c_height, y), CLIFF, n4O); // n4
+				myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF, rot1); // m2
+				myGridMap->set_cell_item(Vector3i(x - 1, wHeight, y), CLIFF, rot2); // m4
 			}
+
+			if ((swTile == RAMP && sTile == GROUND && wTile == GROUND && tile_id == RAMP)) {
+				// Set Floating Ground to Cliff Corner
+				if (sHeight > wHeight) {
+					myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF_CORNER, NORTH); // m3
+				} else {
+					myGridMap->set_cell_item(Vector3i(x - 1, wHeight, y), CLIFF_CORNER, WEST); // m4
+				}
+
+				// Get Orientation (Rotation) Value
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x - 1, swHeight, y - 1)); // m3
+				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x, t_height, y)); // T
+
+				// Set Ramps to Cliffs
+				myGridMap->set_cell_item(Vector3i(x - 1, swHeight, y - 1), CLIFF, rot1); // m3
+				myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF, rot2); // T
+			}
+
+			// EDGE CASE : Higher Ground has to connect to Cliffs 2
+			//
+			// +--------------------+---------------+--------------------+
+			// | NE (x - 1 , y - 1) | E (x , y - 1) | SE (x + 1, y - 1)  |
+			// +--------------------+---------------+--------------------+
+			// | N (x - 1 , y)      | T (x,y)       | S (x + 1) , y      |
+			// +--------------------+---------------+--------------------+
+			// | NW (x - 1 , y + 1) | W (x , y + 1) | SW (x + 1 , y + 1) |
+			// +--------------------+---------------+--------------------+
+			//
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m1 | m2 | m3 | | X  | G  | R  | | X  | R  | G  |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m4 | T  | m5 | | X  | R  | G  | | X  | G  | R  |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m6 | m7 | m8 | | X  | X  | X  | | X  | X  | X  |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+
+			if ((seTile == RAMP && sTile == GROUND && eTile == GROUND && tile_id == RAMP)) {
+				// Set Floating Ground to Cliff Corner
+				if (sHeight > eHeight) {
+					myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF_CORNER, WEST); // m3
+				} else {
+					myGridMap->set_cell_item(Vector3i(x + 1, eHeight, y), CLIFF_CORNER, EAST); // T
+				}
+
+				// Get Orientation (Rotation) Value
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x + 1, seHeight, y - 1)); // m3
+				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x, t_height, y)); // T
+
+				// Set Ramps to Cliffs
+				myGridMap->set_cell_item(Vector3i(x + 1, seHeight, y - 1), CLIFF, rot1); // m3
+				myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF, rot2); // T
+			}
+
+			if ((seTile == GROUND && sTile == RAMP && eTile == RAMP && tile_id == GROUND)) {
+				// Set Floating Ground to Cliff Corner
+				if (seHeight > t_height) {
+					myGridMap->set_cell_item(Vector3i(x + 1, seHeight, y - 1), CLIFF_CORNER, NORTH); // m3
+				} else {
+					myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF_CORNER, SOUTH); // T
+				}
+
+				// Set Ramp's to Cliffs
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x, sHeight, y - 1)); // m2
+				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x + 1, eHeight, y)); // m5
+
+				myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF, rot1); // m2
+				myGridMap->set_cell_item(Vector3i(x + 1, eHeight, y), CLIFF, rot2); // m5
+			}
+
+			/*****************************************************
+
+				EDGE CASE FIX :
+
+
+
+			*****************************************************/
 
 			// EDGE CASE : Higher Ground has to connect to Cliffs
 			//

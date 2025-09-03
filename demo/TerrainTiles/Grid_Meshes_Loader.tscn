@@ -35,7 +35,6 @@ visible = false
 visible = false
 
 [node name="Cliffs_Corner" parent="." instance=ExtResource("8_2ix0w")]
-visible = false
 
 [node name="Cliff_Corner_Inner" parent="." instance=ExtResource("9_vsn3x")]
 visible = false
