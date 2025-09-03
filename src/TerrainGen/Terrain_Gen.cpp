@@ -1141,46 +1141,37 @@ Dictionary TerrainGen::generate(
 
 			//
 			// +--------------------+---------------+--------------------+
-			// | NE (x - 1 , y - 1) | E (x , y - 1) | SE (x + 1, y - 1)  |
+			// | NW (x - 1 , y - 1) | N (x , y - 1) | NE (x + 1, y - 1)  |
 			// +--------------------+---------------+--------------------+
-			// | N (x - 1 , y)      | T (x,y)       | S (x + 1) , y      |
+			// | W (x - 1 , y)      | T (x,y)       | E (x + 1) , y      |
 			// +--------------------+---------------+--------------------+
-			// | NW (x - 1 , y + 1) | W (x , y + 1) | SW (x + 1 , y + 1) |
+			// | SW (x - 1 , y + 1) | S (x , y + 1) | SE (x + 1 , y + 1) |
 			// +--------------------+---------------+--------------------+
 			//
-			// +----+----+----+ +----+----+----+
-			// | m1 | m2 | m3 | | NE | E  | SE |
-			// +----+----+----+ +----+----+----+
-			// | m4 | T  | m5 | | N  | T  | S  |
-			// +----+----+----+ +----+----+----+
-			// | m6 | m7 | m8 | | NW | W  | SW |
-			// +----+----+----+ +----+----+----+
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m1 | m2 | m3 | | NW | N  | NE | |    | -Z |    |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m4 | T  | m5 | | W  | T  | E  | | -X |    | X  |
+			// +----+----+----+ +----+----+----+ +----+----+----+
+			// | m6 | m7 | m8 | | SW | S  | SE | |    | Z  |    |
+			// +----+----+----+ +----+----+----+ +----+----+----+
 			//
+			// Note : Cliff Corners point their ground toward game world : South East
+			// Note : Ramp Corners point their high ground toward game world :
 
 			//
 			// Cardinal Neighbors
 			//
 			//
-			// int nHeight = safe_height(x, y + 1, t_height);
-			// int nTile = safe_tile_at(x, y + 1); // m7
 
-			// int eHeight = safe_height(x + 1, y, t_height);
-			// int eTile = safe_tile_at(x + 1, y); // m5
-
-			// int sHeight = safe_height(x, y - 1, t_height);
-			// int sTile = safe_tile_at(x, y - 1); // m2
-
-			// int wHeight = safe_height(x - 1, y, t_height);
-			// int wTile = safe_tile_at(x - 1, y); // m4
-
-			int nHeight = safe_height(x, y + 1, t_height);
-			int nTile = safe_tile_at(x, y + 1); // m7
+			int nHeight = safe_height(x, y - 1, t_height);
+			int nTile = safe_tile_at(x, y - 1); // m2
 
 			int eHeight = safe_height(x + 1, y, t_height);
 			int eTile = safe_tile_at(x + 1, y); // m5
 
-			int sHeight = safe_height(x, y - 1, t_height);
-			int sTile = safe_tile_at(x, y - 1); // m2
+			int sHeight = safe_height(x, y + 1, t_height);
+			int sTile = safe_tile_at(x, y + 1); // m7
 
 			int wHeight = safe_height(x - 1, y, t_height);
 			int wTile = safe_tile_at(x - 1, y); // m4
@@ -1188,29 +1179,18 @@ Dictionary TerrainGen::generate(
 			//
 			// Diagonal Neighbors
 			//
-			// int neHeight = safe_height(x + 1, y + 1, t_height);
-			// int neTile = safe_tile_at(x + 1, y + 1); // m3
 
-			// int seHeight = safe_height(x + 1, y - 1, t_height);
-			// int seTile = safe_tile_at(x + 1, y - 1); // m8
+			int neHeight = safe_height(x + 1, y - 1, t_height);
+			int neTile = safe_tile_at(x + 1, y - 1); // m3
 
-			// int swHeight = safe_height(x - 1, y - 1, t_height);
-			// int swTile = safe_tile_at(x - 1, y - 1); // m6
+			int seHeight = safe_height(x + 1, y + 1, t_height);
+			int seTile = safe_tile_at(x + 1, y + 1); // m8
 
-			// int nwHeight = safe_height(x - 1, y + 1, t_height);
-			// int nwTile = safe_tile_at(x - 1, y + 1); // m1
+			int swHeight = safe_height(x - 1, y + 1, t_height);
+			int swTile = safe_tile_at(x - 1, y + 1); // m6
 
-			int neHeight = safe_height(x + 1, y + 1, t_height);
-			int neTile = safe_tile_at(x + 1, y + 1); // m3
-
-			int seHeight = safe_height(x + 1, y - 1, t_height);
-			int seTile = safe_tile_at(x + 1, y - 1); // m8
-
-			int swHeight = safe_height(x - 1, y - 1, t_height);
-			int swTile = safe_tile_at(x - 1, y - 1); // m6
-
-			int nwHeight = safe_height(x - 1, y + 1, t_height);
-			int nwTile = safe_tile_at(x - 1, y + 1); // m1
+			int nwHeight = safe_height(x - 1, y - 1, t_height);
+			int nwTile = safe_tile_at(x - 1, y - 1); // m1
 
 			//
 			// Water Tiles
@@ -1238,17 +1218,17 @@ Dictionary TerrainGen::generate(
 			}
 
 			if (tile_id == RAMP || tile_id == CLIFF || tile_id == WATER_EDGE) {
-				// +----+----+----+
-				// | m1 | m2 | m3 |
-				// +----+----+----+
-				// | m4 | T  | m5 |
-				// +----+----+----+
-				// | m6 | m7 | m8 |
-				// +----+----+----+
+				// +----+----+----+ +----+----+----+
+				// | m1 | m2 | m3 | | NW | N  | NE |
+				// +----+----+----+ +----+----+----+
+				// | m4 | T  | m5 | | W  | T  | E  |
+				// +----+----+----+ +----+----+----+
+				// | m6 | m7 | m8 | | SW | S  | SE |
+				// +----+----+----+ +----+----+----+
 
 				// Cardinal's
 				//
-				//	N (m7), E (m5), S (m2), W (m4)
+				//	N (m2), E (m5), S (m7), W (m4)
 				//
 				// 	Only two possible combinations an edge piece can be placed
 				//	Since an edge piece must connect from lower elevation to
@@ -1261,13 +1241,13 @@ Dictionary TerrainGen::generate(
 				// North is higher than South
 				// Point to m7
 				if (nHeight == sHeight + 1 && static_cast<TileType>(nTile) == GROUND) {
-					rotation_val = WEST;
+					rotation_val = EAST;
 				}
 
 				// South is higher than North
 				// Point to m2
 				if (sHeight == nHeight + 1 && static_cast<TileType>(sTile) == GROUND) {
-					rotation_val = EAST;
+					rotation_val = WEST;
 				}
 
 				// East is higher than West
@@ -1284,13 +1264,13 @@ Dictionary TerrainGen::generate(
 			}
 
 			// T = Target Cell
-			// +----+----+----+
-			// | m1 | m2 | m3 |
-			// +----+----+----+
-			// | m4 | T  | m5 |
-			// +----+----+----+
-			// | m6 | m7 | m8 |
-			// +----+----+----+
+			// +----+----+----+ +----+----+----+
+			// | m1 | m2 | m3 | | NW | N  | NE |
+			// +----+----+----+ +----+----+----+
+			// | m4 | T  | m5 | | W  | T  | E  |
+			// +----+----+----+ +----+----+----+
+			// | m6 | m7 | m8 | | SW | S  | SE |
+			// +----+----+----+ +----+----+----+
 			//
 			// T should consider m2 + m5, m5 + m7, m7 + m4, and m4 + m2; for cliffs and ramps
 			// Then it should find the highest elevation of ground piece at, m3, m8, m6, m1
@@ -1325,13 +1305,13 @@ Dictionary TerrainGen::generate(
 				const bool swGround = (static_cast<TileType>(swTile) == GROUND);
 				const bool nwGround = (static_cast<TileType>(nwTile) == GROUND);
 
-				// +----+----+----+
-				// | m1 | m2 | m3 |
-				// +----+----+----+
-				// | m4 | T  | m5 |
-				// +----+----+----+
-				// | m6 | m7 | m8 |
-				// +----+----+----+
+				// +----+----+----+ +----+----+----+
+				// | m1 | m2 | m3 | | NW | N  | NE |
+				// +----+----+----+ +----+----+----+
+				// | m4 | T  | m5 | | W  | T  | E  |
+				// +----+----+----+ +----+----+----+
+				// | m6 | m7 | m8 | | SW | S  | SE |
+				// +----+----+----+ +----+----+----+
 				//
 				// Diagonal's
 				//
@@ -1345,41 +1325,41 @@ Dictionary TerrainGen::generate(
 				// North East
 				if (nEdge && eEdge && !sEdge && !wEdge) { // m2 + m5 | NOT m3
 					if (tile_id == CLIFF_CORNER)
-						rotation_val = WEST;
+						rotation_val = NORTH;
 					if (tile_id == RAMP_CORNER)
-						rotation_val = EAST;
+						rotation_val = NORTH;
 					if (tile_id == WATER_CORNER)
-						rotation_val = EAST;
+						rotation_val = NORTH;
 				}
 
 				// South East
 				if (sEdge && eEdge && !nEdge && !wEdge) { // m5 + m7 | NOT m8
 					if (tile_id == CLIFF_CORNER)
-						rotation_val = NORTH;
+						rotation_val = EAST;
 					if (tile_id == RAMP_CORNER)
-						rotation_val = SOUTH;
+						rotation_val = EAST;
 					if (tile_id == WATER_CORNER)
-						rotation_val = SOUTH;
+						rotation_val = EAST;
 				}
 
 				// South West
 				if (sEdge && wEdge && !nEdge && !eEdge) { // m4 + m7 | NOT m6
 					if (tile_id == CLIFF_CORNER)
-						rotation_val = EAST;
+						rotation_val = SOUTH;
 					if (tile_id == RAMP_CORNER)
-						rotation_val = WEST;
+						rotation_val = SOUTH;
 					if (tile_id == WATER_CORNER)
-						rotation_val = WEST;
+						rotation_val = SOUTH;
 				}
 
 				// North West
 				if (nEdge && wEdge && !sEdge && !eEdge) { // m4 + m2 | NOT m1
 					if (tile_id == CLIFF_CORNER)
-						rotation_val = SOUTH;
+						rotation_val = WEST;
 					if (tile_id == RAMP_CORNER)
-						rotation_val = NORTH;
+						rotation_val = WEST;
 					if (tile_id == WATER_CORNER)
-						rotation_val = NORTH;
+						rotation_val = WEST;
 				}
 			}
 
@@ -1404,12 +1384,20 @@ Dictionary TerrainGen::generate(
 			// EDGE CASE : Higher Ground has to connect to Cliffs 1
 			//
 			// +--------------------+---------------+--------------------+
-			// | NE (x - 1 , y - 1) | E (x , y - 1) | SE (x + 1, y - 1)  |
+			// | NW (x - 1 , y - 1) | N (x , y - 1) | NE (x + 1, y - 1)  |
 			// +--------------------+---------------+--------------------+
-			// | N (x - 1 , y)      | T (x,y)       | S (x + 1) , y      |
+			// | W (x - 1 , y)      | T (x,y)       | E (x + 1) , y      |
 			// +--------------------+---------------+--------------------+
-			// | NW (x - 1 , y + 1) | W (x , y + 1) | SW (x + 1 , y + 1) |
+			// | SW (x - 1 , y + 1) | S (x , y + 1) | SE (x + 1 , y + 1) |
 			// +--------------------+---------------+--------------------+
+			//
+			// +----+----+----+ +----+----+----+
+			// | m1 | m2 | m3 | | NW | N  | NE |
+			// +----+----+----+ +----+----+----+
+			// | m4 | T  | m5 | | W  | T  | E  |
+			// +----+----+----+ +----+----+----+
+			// | m6 | m7 | m8 | | SW | S  | SE |
+			// +----+----+----+ +----+----+----+
 			//
 			// +----+----+----+ +----+----+----+ +----+----+----+
 			// | m1 | m2 | m3 | | G  | R  | X  | | R  | G  | X  |
@@ -1420,49 +1408,57 @@ Dictionary TerrainGen::generate(
 			// +----+----+----+ +----+----+----+ +----+----+----+
 			//
 
-			if ((swTile == GROUND && sTile == RAMP && wTile == RAMP && tile_id == GROUND)) {
+			if ((nwTile == GROUND && nTile == RAMP && wTile == RAMP && tile_id == GROUND)) {
 				// Set Floating Ground to Cliff Corner
-				if (swHeight > t_height) {
-					myGridMap->set_cell_item(Vector3i(x - 1, swHeight, y - 1), CLIFF_CORNER, WEST); // m1
+				if (nwHeight > t_height) {
+					myGridMap->set_cell_item(Vector3i(x - 1, nwHeight, y - 1), CLIFF_CORNER_INNER, SOUTH); // m1
 				} else {
-					myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF_CORNER, EAST); // T
+					myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF_CORNER_INNER, NORTH); // T
 				}
 
 				// Get Orientation (Rotation) Value
-				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x, sHeight, y - 1)); // m2
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x, nHeight, y - 1)); // m2
 				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x - 1, wHeight, y)); // m4
 
 				// Set Ramps to Cliffs
-				myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF, rot1); // m2
+				myGridMap->set_cell_item(Vector3i(x, nHeight, y - 1), CLIFF, rot1); // m2
 				myGridMap->set_cell_item(Vector3i(x - 1, wHeight, y), CLIFF, rot2); // m4
 			}
 
-			if ((swTile == RAMP && sTile == GROUND && wTile == GROUND && tile_id == RAMP)) {
+			if ((nwTile == RAMP && nTile == GROUND && wTile == GROUND && tile_id == RAMP)) {
 				// Set Floating Ground to Cliff Corner
-				if (sHeight > wHeight) {
-					myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF_CORNER, NORTH); // m3
+				if (nHeight > wHeight) {
+					myGridMap->set_cell_item(Vector3i(x, nHeight, y - 1), CLIFF_CORNER_INNER, SOUTH); // m2
 				} else {
-					myGridMap->set_cell_item(Vector3i(x - 1, wHeight, y), CLIFF_CORNER, WEST); // m4
+					myGridMap->set_cell_item(Vector3i(x - 1, wHeight, y), CLIFF_CORNER_INNER, NORTH); // m4
 				}
 
 				// Get Orientation (Rotation) Value
-				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x - 1, swHeight, y - 1)); // m3
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x - 1, nwHeight, y - 1)); // m1
 				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x, t_height, y)); // T
 
 				// Set Ramps to Cliffs
-				myGridMap->set_cell_item(Vector3i(x - 1, swHeight, y - 1), CLIFF, rot1); // m3
+				myGridMap->set_cell_item(Vector3i(x - 1, nwHeight, y - 1), CLIFF, rot1); // m1
 				myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF, rot2); // T
 			}
 
 			// EDGE CASE : Higher Ground has to connect to Cliffs 2
 			//
 			// +--------------------+---------------+--------------------+
-			// | NE (x - 1 , y - 1) | E (x , y - 1) | SE (x + 1, y - 1)  |
+			// | NW (x - 1 , y - 1) | N (x , y - 1) | NE (x + 1, y - 1)  |
 			// +--------------------+---------------+--------------------+
-			// | N (x - 1 , y)      | T (x,y)       | S (x + 1) , y      |
+			// | W (x - 1 , y)      | T (x,y)       | E (x + 1) , y      |
 			// +--------------------+---------------+--------------------+
-			// | NW (x - 1 , y + 1) | W (x , y + 1) | SW (x + 1 , y + 1) |
+			// | SW (x - 1 , y + 1) | S (x , y + 1) | SE (x + 1 , y + 1) |
 			// +--------------------+---------------+--------------------+
+			//
+			// +----+----+----+ +----+----+----+
+			// | m1 | m2 | m3 | | NW | N  | NE |
+			// +----+----+----+ +----+----+----+
+			// | m4 | T  | m5 | | W  | T  | E  |
+			// +----+----+----+ +----+----+----+
+			// | m6 | m7 | m8 | | SW | S  | SE |
+			// +----+----+----+ +----+----+----+
 			//
 			// +----+----+----+ +----+----+----+ +----+----+----+
 			// | m1 | m2 | m3 | | X  | G  | R  | | X  | R  | G  |
@@ -1472,36 +1468,36 @@ Dictionary TerrainGen::generate(
 			// | m6 | m7 | m8 | | X  | X  | X  | | X  | X  | X  |
 			// +----+----+----+ +----+----+----+ +----+----+----+
 
-			if ((seTile == RAMP && sTile == GROUND && eTile == GROUND && tile_id == RAMP)) {
+			if ((neTile == RAMP && nTile == GROUND && eTile == GROUND && tile_id == RAMP)) {
 				// Set Floating Ground to Cliff Corner
-				if (sHeight > eHeight) {
-					myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF_CORNER, WEST); // m3
+				if (nHeight > eHeight) {
+					myGridMap->set_cell_item(Vector3i(x, nHeight, y - 1), CLIFF_CORNER_INNER, SOUTH); // m2
 				} else {
-					myGridMap->set_cell_item(Vector3i(x + 1, eHeight, y), CLIFF_CORNER, EAST); // T
+					myGridMap->set_cell_item(Vector3i(x + 1, eHeight, y), CLIFF_CORNER_INNER, NORTH); // m5
 				}
 
 				// Get Orientation (Rotation) Value
-				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x + 1, seHeight, y - 1)); // m3
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x + 1, neHeight, y - 1)); // m3
 				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x, t_height, y)); // T
 
 				// Set Ramps to Cliffs
-				myGridMap->set_cell_item(Vector3i(x + 1, seHeight, y - 1), CLIFF, rot1); // m3
+				myGridMap->set_cell_item(Vector3i(x + 1, neHeight, y - 1), CLIFF, rot1); // m3
 				myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF, rot2); // T
 			}
 
-			if ((seTile == GROUND && sTile == RAMP && eTile == RAMP && tile_id == GROUND)) {
+			if ((neTile == GROUND && nTile == RAMP && eTile == RAMP && tile_id == GROUND)) {
 				// Set Floating Ground to Cliff Corner
-				if (seHeight > t_height) {
-					myGridMap->set_cell_item(Vector3i(x + 1, seHeight, y - 1), CLIFF_CORNER, NORTH); // m3
+				if (neHeight > t_height) {
+					myGridMap->set_cell_item(Vector3i(x + 1, neHeight, y - 1), CLIFF_CORNER_INNER, NORTH); // m3
 				} else {
-					myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF_CORNER, SOUTH); // T
+					myGridMap->set_cell_item(Vector3i(x, t_height, y), CLIFF_CORNER_INNER, SOUTH); // T
 				}
 
 				// Set Ramp's to Cliffs
-				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x, sHeight, y - 1)); // m2
+				int rot1 = myGridMap->get_cell_item_orientation(Vector3i(x, nHeight, y - 1)); // m2
 				int rot2 = myGridMap->get_cell_item_orientation(Vector3i(x + 1, eHeight, y)); // m5
 
-				myGridMap->set_cell_item(Vector3i(x, sHeight, y - 1), CLIFF, rot1); // m2
+				myGridMap->set_cell_item(Vector3i(x, nHeight, y - 1), CLIFF, rot1); // m2
 				myGridMap->set_cell_item(Vector3i(x + 1, eHeight, y), CLIFF, rot2); // m5
 			}
 
