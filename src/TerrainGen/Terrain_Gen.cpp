@@ -15,7 +15,7 @@ Dictionary TerrainGen::generate(
 		int width,
 		int elevationMax, // i.e. Depth/Height
 		int seed,
-		int openAreaMin,
+		int provinceSize,
 		int noiseType,
 		double waterRemoval,
 		float cliffThreshold,
@@ -25,6 +25,8 @@ Dictionary TerrainGen::generate(
 		Setup
 
 	*****************************************************/
+	default_random_engine rng(seed);
+
 	int dx[4] = { 1, -1, 0, 0 };
 	int dy[4] = { 0, 0, 1, -1 };
 
@@ -49,22 +51,15 @@ Dictionary TerrainGen::generate(
 	int reducedY = floor(heightx2 / elevationMax);
 
 	//
-	// Open Area Tracker
+	// Large Object Placement Map
 	//
-	struct Flat3x3s {
-		int x, elevation, y;
-	};
-	vector<Flat3x3s> flatZones;
+
+	vector<OpenAreas> flatZones;
 	vector<vector<bool>> isFlat(widthx2, vector<bool>(heightx2, false));
 
 	//
 	// Hydrology Path System
 	//
-	struct FlowCell {
-		int flowToX = -1;
-		int flowToY = -1;
-		float slope = 0.0f;
-	};
 
 	float totalFlow = 0.0f;
 	int flowCount = 0;
@@ -77,10 +72,6 @@ Dictionary TerrainGen::generate(
 	//
 	// Poisson Disk Sampling
 	//
-
-	struct Point {
-		int x, y;
-	};
 
 	vector<Point> poissonSamples;
 
@@ -103,6 +94,8 @@ Dictionary TerrainGen::generate(
 	vector<vector<int>> elevationMapTiles(width, vector<int>(height, 0)); // Filtered Elevation | Used Elevation in Tile Map
 	// Each cell represents a quarter of the original tile
 	vector<vector<bool>> placeableMap(widthx2, vector<bool>(heightx2, true));
+	// Water Positions
+	vector<pair<int, int>> waterPoints;
 
 	/*****************************************************
 
@@ -123,6 +116,229 @@ Dictionary TerrainGen::generate(
 
 	*****************************************************/
 
+	generate_blocky_heightmap(
+			noise,
+			widthx2, heightx2,
+			reducedX, reducedY,
+			elevationMax,
+			rawNoise,
+			heightMap,
+			lowResMap,
+			waterPoints,
+			rng);
+
+	/*****************************************************
+
+		Large Object Placement
+
+			Split the Map into chunks & ensure open area
+
+	*****************************************************/
+
+	generate_province_points(
+			width,
+			height,
+			provinceSize,
+			heightMap,
+			widthx2,
+			heightx2,
+			flatZones,
+			rng);
+
+	/*****************************************************
+
+		Water Generation
+
+			Lakes & River Generation
+
+	*****************************************************/
+	generate_lakes(
+			heightMap,
+			waterPoints,
+			rng,
+			0, // minLakes
+			10, // maxLakes
+			9, // minLakeSize
+			200); // maxLakeSize
+
+	generate_rivers(
+			heightMap,
+			waterPoints,
+			rng,
+			0, // minRivers
+			9, // maxRivers
+			20, // minRiverSize
+			200); // maxRiverSize
+
+	/*****************************************************
+
+		Hydrology Path Generation
+
+			Using the RawNoise -> Downhill Flow, Flow Accumulation
+
+			Define non-placeable cells for
+			Poisson Disk Sampling
+
+	*****************************************************/
+
+	compute_flow_and_walkable_areas(
+			heightMap,
+			flowMap,
+			inflowMap,
+			flowAccumulation,
+			walkableMap,
+			widthx2,
+			heightx2);
+
+	/*****************************************************
+
+		Tile Placement
+
+			Using a dual grid system, determine the correct
+			tile's for each cell
+
+	*****************************************************/
+
+	//
+	// Phase 1 : Determine the Tile Type
+	//
+	//	Tiles are determined based on the dual grid system
+	//
+	determine_tile_types(
+			width,
+			height,
+			heightMap,
+			rawNoise,
+			elevationMap,
+			elevationMapTiles,
+			tileMap,
+			walkableMap,
+			cliffThreshold,
+			myGridMap);
+	//
+	//
+	//
+	// Phase 2 : Corrections & Rotations
+	//
+	//  Description: Determine the Tile's Rotation and correct tiles
+	//
+	// 	Models: Ramp Corner's/ Cliff Corner's / Water Corner's start with HIGH at (−Z, +X)
+	//				i.e., NE corner.
+	//			Ramps / Cliffs / Water Edge's point at -Z (North)
+	//
+	// T = Target Cell / Target Tile
+	// +----+----+----+
+	// | m1 | m2 | m3 |
+	// +----+----+----+
+	// | m4 | T  | m5 |
+	// +----+----+----+
+	// | m6 | m7 | m8 |
+	// +----+----+----+
+	//
+
+	apply_tile_rotations_and_fixes(
+			width,
+			height,
+			elevationMap,
+			myGridMap);
+
+	/*****************************************************
+
+		Poisson Object Placement
+
+			Use Walkable map to find non-walkable area's as placeable area's
+			Use Cliffs & Ramp's Placement as non-placeable area's
+
+	*****************************************************/
+
+	generate_placeable_areas_and_samples(
+			width,
+			height,
+			widthx2,
+			heightx2,
+			walkableMap,
+			tileMap,
+			placeableMap,
+			poissonSamples,
+			3.0f // Minimum Distance
+	);
+
+	/*****************************************************
+
+		Return's
+
+			Return a dictionary of values needed for object
+			placement
+
+			Return : Elevation Map
+				Necessary for height of objects
+
+			Return : Flat Zones
+				Necessary for placing large stuctures
+
+			Return : Poisson Points
+
+	*****************************************************/
+
+	Dictionary result;
+
+	// Convert poissonSamples → Array<Vector3i>
+	Array poissonPoints;
+	for (size_t i = 0; i < poissonSamples.size(); ++i) {
+		int px = poissonSamples[i].x;
+		int py = poissonSamples[i].y;
+		int ex = px / 2;
+		int ey = py / 2;
+
+		if (ex >= 0 && ex < width && ey >= 0 && ey < height) {
+			int elevation = elevationMap[ex][ey];
+			Vector3i point(px, elevation, py);
+			poissonPoints.push_back(point);
+		}
+	}
+	result["poissonPoints"] = poissonPoints;
+
+	// Convert flatZones → Array<Dictionary>
+	Array flatZonePoints;
+	for (size_t i = 0; i < flatZones.size(); ++i) {
+		int fx = flatZones[i].x;
+		int fy = flatZones[i].y;
+		int elevation = flatZones[i].elevation;
+
+		Vector3i point(fx, elevation, fy);
+		flatZonePoints.push_back(point);
+	}
+	result["flatZones"] = flatZonePoints;
+
+	// Convert elevationMap → Array<Array<int>>
+	Array elevationArray;
+	for (size_t i = 0; i < elevationMap.size(); ++i) {
+		Array inner;
+		for (size_t j = 0; j < elevationMap[i].size(); ++j) {
+			int val = elevationMap[i][j];
+			inner.push_back(val);
+		}
+		elevationArray.push_back(inner);
+	}
+	result["elevationMap"] = elevationArray;
+
+	return result;
+}
+
+void TerrainGen::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "provinceSize", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
+}
+
+void TerrainGen::generate_blocky_heightmap(
+		godot::Ref<godot::FastNoiseLite> &noise,
+		const int &widthx2, const int &heightx2,
+		const int &reducedX, const int &reducedY,
+		const int &elevationMax,
+		vector<vector<float>> &rawNoise,
+		vector<vector<int>> &heightMap,
+		vector<vector<int>> &lowResMap,
+		vector<pair<int, int>> &waterPoints,
+		default_random_engine &rng) {
 	// Generate the Elevation Map
 	for (int x = 0; x < widthx2; x++) {
 		for (int y = 0; y < heightx2; y++) {
@@ -170,349 +386,430 @@ Dictionary TerrainGen::generate(
 
 			int elevationValue = lowResMap[srcX][srcY];
 
-			float randomFactor = (float)rand() / RAND_MAX;
-			if (elevationValue == 0 && randomFactor < waterRemoval) { // Chance to turn Water to Ground
+			uniform_real_distribution<float> dist(0.0f, 1.0f);
+			float randomFactor = dist(rng);
+
+			// Find all Water Grid Positions
+			if (elevationValue == 0) {
+				// Set all Water to Ground
 				heightMap[x][y] = 1;
-			} else {
+				waterPoints.emplace_back(x, y);
+			}
+			// If not Water, set to elevation Value
+			else {
 				heightMap[x][y] = elevationValue;
 			}
 		}
 	}
+}
 
-	/*****************************************************
+void TerrainGen::flatten_and_smooth_plateau(
+		vector<vector<int>> &heightMap,
+		int width, int height,
+		int centerX, int centerY) {
+	int plateauElevation = heightMap[centerX][centerY];
 
-		Cellular Automata Filter A
+	// Flatten a 6×6 area (36 cells) around the center
+	int halfSize = 3; // 3 cells in each direction → 6×6 total
+	for (int dx = -halfSize; dx < halfSize; ++dx) {
+		for (int dy = -halfSize; dy < halfSize; ++dy) {
+			int x = centerX + dx;
+			int y = centerY + dy;
+			if (x >= 0 && y >= 0 && x < width && y < height) {
+				heightMap[x][y] = plateauElevation;
+			}
+		}
+	}
 
-			Find flat 3x3 zones and expand
+	// Smooth the surrounding ring so no jump > 1
+	//    We'll check all cells in a 1-cell border around the plateau
+	int outerHalf = halfSize + 2;
+	for (int dx = -outerHalf; dx <= outerHalf; ++dx) {
+		for (int dy = -outerHalf; dy <= outerHalf; ++dy) {
+			int x = centerX + dx;
+			int y = centerY + dy;
+			if (x >= 0 && y >= 0 && x < width && y < height) {
+				// Skip cells inside the plateau
+				if (dx >= -halfSize && dx < halfSize &&
+						dy >= -halfSize && dy < halfSize) {
+					continue;
+				}
 
-	*****************************************************/
+				// Compare to nearest plateau cell
+				int nearestX = clamp(x, centerX - halfSize, centerX + halfSize - 1);
+				int nearestY = clamp(y, centerY - halfSize, centerY + halfSize - 1);
+				int nearestElevation = heightMap[nearestX][nearestY];
+				int diff = heightMap[x][y] - nearestElevation;
 
-	//
-	// Phase One : Locate Natural 3x3 chunks (really 4x4)
-	//
-	int openAreaCount = 0;
+				if (diff > 1) {
+					heightMap[x][y] = nearestElevation + 1;
+				} else if (diff < -1) {
+					heightMap[x][y] = nearestElevation - 1;
+				}
+			}
+		}
+	}
+}
 
-	while (openAreaCount < openAreaMin) {
-		// Due to the Dual Grid Tile Assignment System
-		// We really need to ensure the dual grid has 4x4 open areas
-		// Which we will call 3x3's since they eventually become 3x3 tile chunks
-		int FlatChunks3x3 = 0; // 3x3's (4x4 due to Dual Grid)
-		int FlatChunks2x2 = 0; // 2x2's (3x3 due to Dual Grid)
+void TerrainGen::generate_province_points(
+		int width,
+		int height,
+		int provinceSize,
+		vector<vector<int>> &heightMap,
+		int widthx2,
+		int heightx2,
+		vector<OpenAreas> &flatZones,
+		default_random_engine &rng) {
+	if (provinceSize == 0) {
+		UtilityFunctions::print("Gaia Green ERROR | Province Size cannot be 0");
+		return;
+	}
 
-		// Locate natural 3x3 Flat Ground Areas
-		if (FlatChunks3x3 != -1) {
-			// n6 is our center cell
-			// +-----+-----+-----+-----+
-			// | n1  | n2  | n3  | n4  |
-			// +-----+-----+-----+-----+
-			// | n5  | n6  | n7  | n8  |
-			// +-----+-----+-----+-----+
-			// | n9  | n10 | n11 | n12 |
-			// +-----+-----+-----+-----+
-			// | n13 | n14 | n15 | n16 |
-			// +-----+-----+-----+-----+
-			for (int x = 1; x < widthx2 - 4; x += 4) {
-				for (int y = 1; y < heightx2 - 4; y += 4) {
-					int n6 = heightMap[x][y];
-					bool allEqual = true;
-					for (int dx = -1; dx <= 2 && allEqual; ++dx) {
-						for (int dy = -1; dy <= 2; ++dy) {
-							if (heightMap[x + dx][y + dy] != n6) {
-								allEqual = false;
-								break;
+	int sectorSize = static_cast<int>(floor(sqrt((width * height) / static_cast<double>(provinceSize))));
+	int sectorsAcross = width / sectorSize;
+	int sectorsDown = height / sectorSize;
+	int totalSectors = sectorsAcross * sectorsDown;
+
+	// Create a list of all sector indices
+	vector<int> sectorIndices(totalSectors);
+	for (int i = 0; i < totalSectors; ++i) {
+		sectorIndices[i] = i;
+	}
+
+	// Shuffle the sector indices
+	shuffle(sectorIndices.begin(), sectorIndices.end(), rng);
+
+	int flatCount = provinceSize;
+	int sectorCursor = 0;
+
+	// Randomly pick a point within each chunk
+	while (flatCount > 0 && sectorCursor < totalSectors) {
+		int index = sectorIndices[sectorCursor++];
+
+		int sectorX = index % sectorsAcross;
+		int sectorY = index / sectorsAcross;
+
+		int sectorStartX = sectorX * sectorSize;
+		int sectorStartY = sectorY * sectorSize;
+
+		uniform_int_distribution<int> dist(0, sectorSize - 1);
+
+		int offsetX = dist(rng);
+		int offsetY = dist(rng);
+
+		int xPos = sectorStartX + offsetX;
+		int yPos = sectorStartY + offsetY;
+
+		int centerX = xPos * 2;
+		int centerY = yPos * 2;
+
+		int provinceElevation = heightMap[centerX][centerY];
+		if (provinceElevation == 0) {
+			provinceElevation = 1;
+		}
+
+		OpenAreas provincePoint = { xPos, provinceElevation, yPos };
+
+		if (find(flatZones.begin(), flatZones.end(), provincePoint) == flatZones.end()) {
+			flatZones.push_back(provincePoint);
+			flatCount--;
+		}
+
+		// Smooth out any surrounding grid cell elevation values
+		flatten_and_smooth_plateau(heightMap, widthx2, heightx2, centerX, centerY);
+	}
+}
+
+void TerrainGen::generate_lakes(
+		vector<vector<int>> &heightMap,
+		vector<pair<int, int>> &waterPoints,
+		default_random_engine &rng,
+		int minLakes = 0,
+		int maxLakes = 10,
+		int minLakeSize = 9,
+		int maxLakeSize = 200) {
+	try {
+		uniform_int_distribution<int> lakeDist(minLakes, maxLakes);
+		int numOfLakes = lakeDist(rng);
+
+		for (int lakes = 0; lakes < numOfLakes; lakes++) {
+			uniform_int_distribution<int> lakeSizeDist(minLakeSize, maxLakeSize);
+			int sizeOfLakes = lakeSizeDist(rng);
+
+			if (waterPoints.empty())
+				break;
+
+			// Pick a random starting point
+			uniform_int_distribution<int> indexDist(0, static_cast<int>(waterPoints.size()) - 1);
+			int randIndex = indexDist(rng);
+			pair<int, int> currPos = waterPoints[randIndex];
+			waterPoints.erase(waterPoints.begin() + randIndex);
+
+			vector<pair<int, int>> localWater;
+			localWater.insert(localWater.begin(), currPos);
+
+			for (int j = 0; j < 1000; ++j) {
+				pair<int, int> waterPos = localWater.front();
+
+				uniform_int_distribution<int> binaryDist(0, 1);
+				int basePos = binaryDist(rng);
+				int secPos = basePos / 2;
+
+				uniform_int_distribution<int> offsetDist(-1, 1);
+				int thirdPos = (basePos % 2 == 0) ? 0 : offsetDist(rng);
+				int fourthPos = (basePos % 2 == 0) ? 0 : offsetDist(rng);
+
+				for (int k = waterPos.first - secPos + thirdPos;
+						k <= waterPos.first - secPos + thirdPos + basePos; ++k) {
+					for (int l = waterPos.second - secPos + fourthPos;
+							l <= waterPos.second - secPos + fourthPos + basePos; ++l) {
+						if (k >= 0 && k < static_cast<int>(heightMap.size()) &&
+								l >= 0 && l < static_cast<int>(heightMap[0].size())) {
+							heightMap[k][l] = 0;
+
+							// Smooth surrounding area
+							int radius = 8;
+							for (int nk = -radius; nk <= radius; ++nk) {
+								for (int nl = -radius; nl <= radius; ++nl) {
+									if (nk == 0 && nl == 0)
+										continue;
+
+									int neighborX = k + nk;
+									int neighborY = l + nl;
+
+									if (neighborX >= 0 && neighborX < static_cast<int>(heightMap.size()) &&
+											neighborY >= 0 && neighborY < static_cast<int>(heightMap[0].size())) {
+										int &neighborElevation = heightMap[neighborX][neighborY];
+										int diff = heightMap[k][l] - neighborElevation;
+
+										if (diff > 1) {
+											neighborElevation = heightMap[k][l] - 1;
+										} else if (diff < -1) {
+											neighborElevation = heightMap[k][l] + 1;
+										}
+									}
+								}
 							}
 						}
 					}
-					if (allEqual) {
-						FlatChunks3x3 += 1;
-						openAreaCount += 1;
-						flatZones.push_back({ x, n6, y });
-						for (int dx = -1; dx <= 2; ++dx) {
-							for (int dy = -1; dy <= 2; ++dy) {
-								isFlat[x + dx][y + dy] = true;
-							}
-						}
-						if (FlatChunks3x3 >= openAreaMin)
-							break;
-					}
-				}
-			}
-
-			// If None, deny entry back into if statement
-			if (FlatChunks3x3 == 0)
-				FlatChunks3x3 = -1;
-		}
-
-		if (openAreaCount >= openAreaMin)
-			break;
-
-		//
-		// Phase Two : Expand using Cellular Automata
-		//
-
-		// CA Rule: If 5+ neighbors are flat, become flat
-		for (int iter = 0; iter < 3; ++iter) {
-			vector<vector<bool>> nextFlat = isFlat;
-
-			for (int x = 1; x < widthx2 - 1; ++x) {
-				for (int y = 1; y < heightx2 - 1; ++y) {
-					int count = 0;
-					for (int dx = -1; dx <= 1; ++dx) {
-						for (int dy = -1; dy <= 1; ++dy) {
-							if (dx == 0 && dy == 0)
-								continue;
-							if (isFlat[x + dx][y + dy])
-								count++;
-						}
-					}
-
-					if (count >= 5) {
-						nextFlat[x][y] = true;
-						heightMap[x][y] = heightMap[x][y]; // Optional: flatten to neighbor elevation
-					}
-				}
-			}
-
-			isFlat = nextFlat;
-		}
-
-		//
-		// Phase Three : Scan for new Flat Zones
-		//
-
-		for (int x = 1; x < widthx2 - 4; x += 4) {
-			for (int y = 1; y < heightx2 - 4; y += 4) {
-				bool allFlat = true;
-
-				for (int dx = 0; dx < 4 && allFlat; ++dx) {
-					for (int dy = 0; dy < 4; ++dy) {
-						if (!isFlat[x + dx][y + dy]) {
-							allFlat = false;
-							break;
-						}
-					}
 				}
 
-				if (allFlat) {
-					openAreaCount++;
-				} // center of 4×4 block
-				if (flatZones.size() >= openAreaMin)
+				sizeOfLakes--;
+				if (sizeOfLakes <= 0)
 					break;
-			}
-		}
-	}
-	/*****************************************************
 
-			Cellular Automata Filter B
+				pair<int, int> myNeighbor = waterPos;
+				vector<int> cardinals = { 0, 1, 2, 3 };
 
-				Patching / Removing Outliers
-				(Cardinal Neighbors Only)
+				for (int m = 0; m < 4; ++m) {
+					uniform_int_distribution<int> cardinalDist(0, static_cast<int>(cardinals.size()) - 1);
+					int idx = cardinalDist(rng);
+					int direction = cardinals[idx];
+					cardinals.erase(cardinals.begin() + idx);
 
-	*****************************************************/
-	int threshold = 2; // Minimum matching neighbors to preserve center
-	int iterations = 2; // Number of CA generations to apply
-
-	vector<vector<int>> curr = heightMap;
-	vector<vector<int>> next = heightMap;
-
-	// Cardinal directions: N, S, E, W
-	const vector<pair<int, int>> cardinalDirs = {
-		{ 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 }
-	};
-
-	// Height Map is a double grid
-	// +----+----+----+----+
-	// | z1 | z2 | y1 | y2 |
-	// +----+----+----+----+
-	// | z3 | z4 | y3 | y5 |
-	// +----+----+----+----+
-	// | x1 | x2 | w1 | w2 |
-	// +----+----+----+----+
-	// | x3 | x4 | w3 | w4 |
-	// +----+----+----+----+
-	//
-	// Eventually the map will be reduced to :
-	// +----+----+
-	// | z  | y  |
-	// +----+----+
-	// | x  | w  |
-	// +----+----+
-
-	for (int it = 0; it < iterations; ++it) {
-		bool anyChanged = false;
-
-		for (int x = 0; x < widthx2; ++x) {
-			for (int y = 0; y < heightx2; ++y) {
-				const int center = curr[x][y];
-
-				// Count neighbors matching the center value
-				int matchCount = 0;
-				for (const auto &[dx, dy] : cardinalDirs) {
-					int nx = x + dx, ny = y + dy;
-					if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
-						continue;
-					if (curr[nx][ny] == center)
-						++matchCount;
-				}
-
-				// Default: preserve current value
-				int newVal = center;
-
-				// Rule 2: If not enough matching neighbors, resolve via dominant neighbor value
-				if (matchCount < threshold) {
-					vector<int> freq(elevationMax + 1, 0);
-
-					// Count frequency of each cardinal neighbor value
-					for (size_t i = 0; i < cardinalDirs.size(); ++i) {
-						int dx = cardinalDirs[i].first;
-						int dy = cardinalDirs[i].second;
-						int nx = x + dx, ny = y + dy;
-						if (nx < 0 || nx >= widthx2 || ny < 0 || ny >= heightx2)
-							continue;
-						++freq[curr[nx][ny]];
-					}
-					// Find dominant neighbor value
-					int dominantVal = center;
-					int maxCount = 0;
-					for (int val = 0; val <= elevationMax; ++val) {
-						if (freq[val] > maxCount) {
-							maxCount = freq[val];
-							dominantVal = val;
-						}
+					switch (direction) {
+						case 0:
+							myNeighbor = { waterPos.first + 1, waterPos.second };
+							break; // East
+						case 1:
+							myNeighbor = { waterPos.first - 1, waterPos.second };
+							break; // West
+						case 2:
+							myNeighbor = { waterPos.first, waterPos.second + 1 };
+							break; // South
+						case 3:
+							myNeighbor = { waterPos.first, waterPos.second - 1 };
+							break; // North
 					}
 
-					// Rule 4: If center is isolated (few dominant neighbors), grow toward dominant
-					if (maxCount <= 1) {
-						newVal = min(dominantVal + 1, elevationMax);
-					}
-					// Rule 3: Otherwise, conform to dominant neighbor value
-					else {
-						newVal = dominantVal;
+					if (find(waterPoints.begin(), waterPoints.end(), myNeighbor) == waterPoints.end()) {
+						int lwSize = static_cast<int>(localWater.size());
+						uniform_real_distribution<float> dist(0.0f, 1.0f);
+						float randomValue = dist(rng);
+						int index = min(lwSize, static_cast<int>(sqrt(randomValue) * lwSize));
+						localWater.insert(localWater.begin() + index, myNeighbor);
 					}
 				}
-
-				next[x][y] = newVal;
-				if (newVal != center)
-					anyChanged = true;
 			}
 		}
-
-		curr.swap(next);
-		if (!anyChanged)
-			break;
+	} catch (const exception &e) {
+		UtilityFunctions::print("Gaia Green ERROR | Exception caught during Lake generation: " + String(e.what()));
+	} catch (...) {
+		UtilityFunctions::print("Gaia Green ERROR | Unknown error occurred during Lake generation.");
 	}
+}
 
-	heightMap = move(curr);
+void TerrainGen::generate_rivers(
+		vector<vector<int>> &heightMap,
+		vector<pair<int, int>> &waterPoints,
+		default_random_engine &rng,
+		int minRivers = 0,
+		int maxRivers = 9,
+		int minRiverSize = 20,
+		int maxRiverSize = 200) {
+	try {
+		uniform_int_distribution<int> riverDist(minRivers, maxRivers);
+		int numOfRivers = riverDist(rng);
 
-	/*****************************************************
+		for (int rivers = 0; rivers < numOfRivers; rivers++) {
+			if (waterPoints.empty())
+				break;
 
-		Cellular Automata Filter C
+			uniform_int_distribution<int> riverSizeDist(minRiverSize, maxRiverSize);
+			int sizeOfRivers = riverSizeDist(rng);
 
-			Water Reduction
+			// Pick a random starting point
+			uniform_int_distribution<int> indexDist(0, static_cast<int>(waterPoints.size()) - 1);
+			int randIndex = indexDist(rng);
+			pair<int, int> currPos = waterPoints[randIndex];
+			waterPoints.erase(waterPoints.begin() + randIndex);
 
-	*****************************************************/
+			vector<pair<int, int>> localWater;
+			localWater.insert(localWater.begin(), currPos);
 
-	int caCcount = 2;
+			queue<int> dirHistory;
 
-	if (waterRemoval >= 10.0f) {
-		// Clamp percentage
-		if (waterRemoval > 100.0f)
-			waterRemoval = 100.0f;
-		if (waterRemoval < 0.0f)
-			waterRemoval = 0.0f;
+			for (int j = 0; j < 1000; ++j) {
+				pair<int, int> waterPos = localWater.front();
 
-		for (int iter = 0; iter < caCcount; iter++) {
-			vector<vector<bool>> visited(heightx2, vector<bool>(widthx2, false));
+				uniform_real_distribution<double> dist(0.0, 1.0);
+				int basePos = static_cast<int>(pow(dist(rng), 3) * 3);
+				int secPos = basePos / 2;
 
-			for (int y = 0; y < heightx2; y++) {
-				for (int x = 0; x < widthx2; x++) {
-					if (heightMap[y][x] != 0 || visited[y][x])
-						continue;
+				uniform_int_distribution<int> offsetDist(-1, 1);
+				int thirdPos = (basePos % 2 == 0) ? 0 : offsetDist(rng);
+				int fourthPos = (basePos % 2 == 0) ? 0 : offsetDist(rng);
 
-					// Manual stack flood fill
-					vector<pair<int, int>> stack;
-					vector<pair<int, int>> region;
-					stack.push_back(make_pair(x, y));
-					visited[y][x] = true;
+				// Carve river cells
+				for (int k = waterPos.first - secPos + thirdPos;
+						k <= waterPos.first - secPos + thirdPos + basePos; ++k) {
+					for (int l = waterPos.second - secPos + fourthPos;
+							l <= waterPos.second - secPos + fourthPos + basePos; ++l) {
+						if (k >= 0 && k < static_cast<int>(heightMap.size()) &&
+								l >= 0 && l < static_cast<int>(heightMap[0].size())) {
+							heightMap[k][l] = 0;
 
-					while (!stack.empty()) {
-						pair<int, int> current = stack.back();
-						stack.pop_back();
-						int cx = current.first;
-						int cy = current.second;
-						region.push_back(current);
+							// Smooth surrounding area
+							int radius = 8;
+							for (int nk = -radius; nk <= radius; ++nk) {
+								for (int nl = -radius; nl <= radius; ++nl) {
+									if (nk == 0 && nl == 0)
+										continue;
 
-						for (int d = 0; d < 4; d++) {
-							int nx = cx + dx[d];
-							int ny = cy + dy[d];
-							if (nx < 0 || ny < 0 || nx >= widthx2 || ny >= heightx2)
-								continue;
-							if (visited[ny][nx])
-								continue;
-							if (heightMap[ny][nx] != 0)
-								continue;
-							visited[ny][nx] = true;
-							stack.push_back(make_pair(nx, ny));
-						}
-					}
+									int neighborX = k + nk;
+									int neighborY = l + nl;
 
-					// Determine how many cells to flip
-					int regionSize = region.size();
-					int toFlip = (int)(regionSize * (waterRemoval / 100.0f));
-					if (toFlip <= 0)
-						continue;
+									if (neighborX >= 0 && neighborX < static_cast<int>(heightMap.size()) &&
+											neighborY >= 0 && neighborY < static_cast<int>(heightMap[0].size())) {
+										int &neighborElevation = heightMap[neighborX][neighborY];
+										int diff = heightMap[k][l] - neighborElevation;
 
-					// Rank by proximity to edge
-					vector<pair<int, pair<int, int>>> candidates;
-					for (int i = 0; i < regionSize; i++) {
-						int rx = region[i].first;
-						int ry = region[i].second;
-						int distX = min(rx, widthx2 - 1 - rx);
-						int distY = min(ry, heightx2 - 1 - ry);
-						int edgeDist = min(distX, distY);
-						candidates.push_back(make_pair(edgeDist, region[i]));
-					}
-
-					// Bubble sort
-					for (int i = 0; i < (int)candidates.size(); i++) {
-						for (int j = i + 1; j < (int)candidates.size(); j++) {
-							if (candidates[j].first < candidates[i].first) {
-								pair<int, pair<int, int>> temp = candidates[i];
-								candidates[i] = candidates[j];
-								candidates[j] = temp;
+										if (diff > 1) {
+											neighborElevation = heightMap[k][l] - 1;
+										} else if (diff < -1) {
+											neighborElevation = heightMap[k][l] + 1;
+										}
+									}
+								}
 							}
 						}
 					}
+				}
 
-					// Flip top N water cells to land
-					for (int i = 0; i < toFlip && i < (int)candidates.size(); i++) {
-						int fx = candidates[i].second.first;
-						int fy = candidates[i].second.second;
-						heightMap[fy][fx] = 1;
+				sizeOfRivers--;
+				if (sizeOfRivers <= 0)
+					break;
+
+				// Weighted direction choice to bias flow
+				struct WeightedDir {
+					double weight;
+					int dir;
+				};
+				vector<WeightedDir> shareList;
+				for (int d = 0; d < 4; ++d) {
+					int count = 0;
+					queue<int> temp = dirHistory;
+					while (!temp.empty()) {
+						if (temp.front() == d)
+							count++;
+						temp.pop();
+					}
+					double weight = 1.0 / (count + 1);
+					shareList.push_back({ weight, d });
+				}
+
+				for (int m = 0; m < 4; ++m) {
+					// Weighted random choice
+					double totalWeight = 0;
+					for (auto &wd : shareList)
+						totalWeight += wd.weight;
+					uniform_real_distribution<double> dist(0.0, totalWeight);
+					double r = dist(rng);
+
+					int chosenDir = -1;
+					for (auto &wd : shareList) {
+						r -= wd.weight;
+						if (r <= 0) {
+							chosenDir = wd.dir;
+							break;
+						}
+					}
+
+					// Remove chosen direction from list
+					shareList.erase(
+							remove_if(shareList.begin(), shareList.end(),
+									[&](const WeightedDir &wd) { return wd.dir == chosenDir; }),
+							shareList.end());
+
+					pair<int, int> myNeighbor = waterPos;
+					switch (chosenDir) {
+						case 0:
+							myNeighbor = { waterPos.first + 1, waterPos.second };
+							break; // East
+						case 1:
+							myNeighbor = { waterPos.first - 1, waterPos.second };
+							break; // West
+						case 2:
+							myNeighbor = { waterPos.first, waterPos.second + 1 };
+							break; // South
+						case 3:
+							myNeighbor = { waterPos.first, waterPos.second - 1 };
+							break; // North
+					}
+
+					if (find(waterPoints.begin(), waterPoints.end(), myNeighbor) == waterPoints.end()) {
+						localWater.insert(localWater.begin(), myNeighbor);
+
+						if (m == 3) {
+							dirHistory.push(chosenDir);
+							while (dirHistory.size() > 3)
+								dirHistory.pop();
+						}
 					}
 				}
 			}
 		}
+	} catch (const exception &e) {
+		UtilityFunctions::print("Gaia Green ERROR | Exception caught during River generation: " + String(e.what()));
+	} catch (...) {
+		UtilityFunctions::print("Gaia Green ERROR | Unknown error occurred during River generation.");
 	}
+}
 
-	/*****************************************************
-
-		Hydrology Path Generation
-
-			Using the RawNoise -> Downhill Flow, Flow Accumulation
-
-			Define non-placeable cells for
-			Poisson Disk Sampling
-
-	*****************************************************/
+void TerrainGen::compute_flow_and_walkable_areas(
+		vector<vector<int>> &heightMap,
+		vector<vector<FlowCell>> &flowMap,
+		vector<vector<vector<pair<int, int>>>> &inflowMap,
+		vector<vector<int>> &flowAccumulation,
+		vector<vector<bool>> &walkableMap,
+		int widthx2,
+		int heightx2) {
+	float totalFlow = 0.0f;
+	int flowCount = 0;
 
 	//
 	// Phase 1 : Downhill Flow
 	//
-	//		Assign Movement Cost, Using slope descent,
-	//		point to the lowest cost neighbor
-	//
-
 	for (int x = 1; x < widthx2 - 1; x++) {
 		for (int y = 1; y < heightx2 - 1; y++) {
 			float currentElevation = heightMap[x][y];
@@ -547,13 +844,8 @@ Dictionary TerrainGen::generate(
 	//
 	// Phase 2 : Flow Accumulation
 	//
-	//		Using slope descent, point to the lowest cost
-	//		neighbor
-	//
 
-	// Inflow Map Builder
-	//
-	//	 Who flows into each cell
+	// Build inflow map
 	for (int x = 1; x < widthx2 - 1; ++x) {
 		for (int y = 1; y < heightx2 - 1; ++y) {
 			int tx = flowMap[x][y].flowToX;
@@ -564,10 +856,7 @@ Dictionary TerrainGen::generate(
 		}
 	}
 
-	// Flow Accumulation Tracker
-	//
-	//	 Find flow by iterating over all cells
-	//
+	// Accumulate flow
 	for (int x = 1; x < widthx2 - 1; ++x) {
 		for (int y = 1; y < heightx2 - 1; ++y) {
 			for (auto &upstream : inflowMap[x][y]) {
@@ -586,24 +875,13 @@ Dictionary TerrainGen::generate(
 	//
 	// Phase 3 : Define Walkable Areas
 	//
-	//		Using the flow paths & accumulation counts
-	//		determine walkable area's on the map
-	//
-	//		Used later in Tile Placement to enforce
-	//		Ramps over Cliffs
-	//
-	//		Determine path sizes based on Flow Accumulation
-	//		Mark more cells in perpendicular direction to flow direction
-	//		for cells with larger accumulation
-	//
-
-	int maxRiverWidth = 1; // Max number of perpendicular cells (to river flow direction) to mark
+	int maxRiverWidth = 1; // Max perpendicular cells to mark
 
 	for (int x = 1; x < widthx2 - 1; x++) {
 		for (int y = 1; y < heightx2 - 1; y++) {
 			float flow = flowAccumulation[x][y];
 			if (flow < averageFlow)
-				continue; // Only mark above-average flow cells
+				continue; // Only above-average flow cells
 
 			walkableMap[x][y] = false;
 
@@ -615,7 +893,7 @@ Dictionary TerrainGen::generate(
 			int perpX2 = dy;
 			int perpY2 = -dx;
 
-			int riverWidth = min(maxRiverWidth, static_cast<int>(flow / averageFlow));
+			int riverWidth = std::min(maxRiverWidth, static_cast<int>(flow / averageFlow));
 
 			for (int w = 1; w <= riverWidth; w++) {
 				int px1 = x + perpX1 * w;
@@ -631,119 +909,19 @@ Dictionary TerrainGen::generate(
 			}
 		}
 	}
+}
 
-	/*****************************************************
-
-		Enforce Square Patterns
-
-			Due to the Cellular Automata Filters, the
-			square like patterns are pushed into rounded
-			patterns.
-			Ensure the pattern returns to a square pattern
-			so that the isometric tiles are useable.
-
-	*****************************************************/
-
-	int enforcement = 2;
-
-	for (int i = 0; i < enforcement; i++) {
-		for (int x = 0; x < width - 1; x += 2) {
-			for (int y = 0; y < height - 1; y += 2) {
-				int a = heightMap[x][y];
-				int b = heightMap[x + 1][y];
-				int c = heightMap[x][y + 1];
-				int d = heightMap[x + 1][y + 1];
-
-				// If already uniform or already a clean vertical/horizontal split, do nothing.
-				bool uniform = (a == b && a == c && a == d);
-				bool vertical = (a == c && b == d && a != b);
-				bool horizontal = (a == b && c == d && a != c);
-				if (uniform || vertical || horizontal)
-					continue;
-
-				// Count frequency of each value manually
-				int countA = 0, countB = 0, countC = 0, countD = 0;
-				if (a == a)
-					countA++;
-				if (b == a)
-					countA++;
-				if (c == a)
-					countA++;
-				if (d == a)
-					countA++;
-
-				if (a != b) {
-					if (b == b)
-						countB++;
-					if (a == b)
-						countB++; // already counted
-					if (c == b)
-						countB++;
-					if (d == b)
-						countB++;
-				}
-
-				if (a != c && b != c) {
-					if (c == c)
-						countC++;
-					if (a == c)
-						countC++;
-					if (b == c)
-						countC++;
-					if (d == c)
-						countC++;
-				}
-
-				if (a != d && b != d && c != d) {
-					if (d == d)
-						countD++;
-					if (a == d)
-						countD++;
-					if (b == d)
-						countD++;
-					if (c == d)
-						countD++;
-				}
-
-				// Determine mode (most frequent value)
-				int mode = a;
-				int maxCount = countA;
-				if (countB > maxCount) {
-					mode = b;
-					maxCount = countB;
-				}
-				if (countC > maxCount) {
-					mode = c;
-					maxCount = countC;
-				}
-				if (countD > maxCount) {
-					mode = d;
-					maxCount = countD;
-				}
-
-				// Snap all four cells to the mode
-				heightMap[x][y] = mode;
-				heightMap[x + 1][y] = mode;
-				heightMap[x][y + 1] = mode;
-				heightMap[x + 1][y + 1] = mode;
-			}
-		}
-	}
-
-	/*****************************************************
-
-	Tile Placement
-
-		Using a dual grid system, determine the correct
-		tile's for each cell
-
-	*****************************************************/
-
-	//
-	// Phase 1 : Determine the Tile Type
-	//
-	//	Tiles are determined based on the dual grid system
-	//
+void TerrainGen::determine_tile_types(
+		int width,
+		int height,
+		const std::vector<std::vector<int>> &heightMap,
+		const std::vector<std::vector<float>> &rawNoise,
+		std::vector<std::vector<int>> &elevationMap,
+		std::vector<std::vector<int>> &elevationMapTiles,
+		std::vector<std::vector<TileType>> &tileMap,
+		const std::vector<std::vector<bool>> &walkableMap,
+		float cliffThreshold,
+		GridMap *myGridMap) {
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
 			// Neighbor's of Data Grid Map
@@ -1091,27 +1269,37 @@ Dictionary TerrainGen::generate(
 			myGridMap->set_cell_item(Vector3i(x, elevation, y), tileMap[x][y], NORTH);
 		}
 	}
+}
 
-	//
-	//
-	//
-	// Phase 2 : Corrections & Rotations
-	//
-	//  Description: Determine the Tile's Rotation and correct tiles
-	//
-	// 	Models: Ramp Corner's/ Cliff Corner's / Water Corner's start with HIGH at (−Z, +X)
-	//				i.e., NE corner.
-	//			Ramps / Cliffs / Water Edge's point at -Z (North)
-	//
-	// T = Target Cell / Target Tile
-	// +----+----+----+
-	// | m1 | m2 | m3 |
-	// +----+----+----+
-	// | m4 | T  | m5 |
-	// +----+----+----+
-	// | m6 | m7 | m8 |
-	// +----+----+----+
-	//
+void TerrainGen::print_surrounding_cells(const vector<vector<int>> &heightMap, int cx, int cy, int radius) {
+	UtilityFunctions::print("C Elevation : ", heightMap[cx][cy]);
+	for (int x = cx - radius; x <= cx + radius; ++x) {
+		String row;
+		for (int y = cy - radius; y <= cy + radius; ++y) {
+			if (x == cx && y == cy) {
+				row += "C "; // mark center
+				continue;
+			}
+			if (y >= 0 && y < static_cast<int>(heightMap.size()) &&
+					x >= 0 && x < static_cast<int>(heightMap[0].size())) {
+				row += String::num_int64(heightMap[x][y]) + " ";
+			} else {
+				row += "X "; // out-of-bounds marker
+			}
+		}
+		UtilityFunctions::print(row);
+	}
+
+	UtilityFunctions::print("\n\n");
+}
+
+void TerrainGen::apply_tile_rotations_and_fixes(
+		int width,
+		int height,
+		const std::vector<std::vector<int>> &elevationMap,
+		GridMap *myGridMap) {
+	// TODO : Water Corner's are not turning correctly
+	// TODO : Water tiles are being placed at higher elevation, may be fixed by smoothing lake/river generations
 
 	for (int x = 0; x < width; x++) {
 		for (int y = 0; y < height; y++) {
@@ -1522,51 +1710,18 @@ Dictionary TerrainGen::generate(
 			// Two higher ramps and two lower ramps with a ramp tile in the center
 		}
 	}
+}
 
-	/*****************************************************
-
-		Open Area Finder
-
-			Find areas that have 3x3 flat areas
-			Used for placing Large Structures
-
-	*****************************************************/
-	// Empty FlatZones
-	flatZones.clear();
-
-	for (int i = 0; i <= width - 3; i += 3) {
-		for (int j = 0; j <= height - 3; j += 3) {
-			bool allGround = true;
-
-			// Check Neighbors
-			for (int dx = 0; dx < 3 && allGround; dx++) {
-				for (int dy = 0; dy < 3; dy++) {
-					if (tileMap[i + dx][j + dy] != GROUND) {
-						allGround = false;
-						break;
-					}
-				}
-			}
-
-			if (allGround) {
-				int centerX = i + 1;
-				int centerY = j + 1;
-				int elevation = elevationMap[centerX][centerY];
-
-				flatZones.push_back({ centerX, elevation, centerY });
-			}
-		}
-	}
-
-	/*****************************************************
-
-		Poisson Object Placement
-
-			Use Walkable map to find non-walkable area's as placeable area's
-			Use Cliffs & Ramp's Placement as non-placeable area's
-
-	*****************************************************/
-
+void TerrainGen::generate_placeable_areas_and_samples(
+		int width,
+		int height,
+		int widthx2,
+		int heightx2,
+		const std::vector<std::vector<bool>> &walkableMap,
+		const std::vector<std::vector<TileType>> &tileMap,
+		std::vector<std::vector<bool>> &placeableMap,
+		std::vector<Point> &poissonSamples,
+		float minDistance = 3.0f) {
 	// Generate Placeable Area's
 
 	for (int x = 0; x < width; x++) {
@@ -1589,8 +1744,6 @@ Dictionary TerrainGen::generate(
 
 	// Poisson Disk Sampling
 
-	float minDistance = 3.0f; // Minimum spacing between objects
-
 	for (int x = 0; x < widthx2; x++) {
 		for (int y = 0; y < heightx2; y++) {
 			if (!placeableMap[x][y])
@@ -1611,69 +1764,4 @@ Dictionary TerrainGen::generate(
 			}
 		}
 	}
-
-	/*****************************************************
-
-		Return's
-
-			Return a dictionary of values needed for object
-			placement
-
-			Return : Elevation Map
-				Necessary for height of objects
-
-			Return : Flat Zones
-				Necessary for placing large stuctures
-
-			Return : Poisson Points
-
-	*****************************************************/
-
-	Dictionary result;
-
-	// Convert poissonSamples → Array<Vector3i>
-	Array poissonPoints;
-	for (size_t i = 0; i < poissonSamples.size(); ++i) {
-		int px = poissonSamples[i].x;
-		int py = poissonSamples[i].y;
-		int ex = px / 2;
-		int ey = py / 2;
-
-		if (ex >= 0 && ex < width && ey >= 0 && ey < height) {
-			int elevation = elevationMap[ex][ey];
-			Vector3i point(px, elevation, py);
-			poissonPoints.push_back(point);
-		}
-	}
-	result["poissonPoints"] = poissonPoints;
-
-	// Convert flatZones → Array<Dictionary>
-	Array flatZonePoints;
-	for (size_t i = 0; i < flatZones.size(); ++i) {
-		int fx = flatZones[i].x;
-		int fy = flatZones[i].y;
-		int elevation = flatZones[i].elevation;
-
-		Vector3i point(fx, elevation, fy);
-		flatZonePoints.push_back(point);
-	}
-	result["flatZonePoints"] = flatZonePoints;
-
-	// Convert elevationMap → Array<Array<int>>
-	Array elevationArray;
-	for (size_t i = 0; i < elevationMap.size(); ++i) {
-		Array inner;
-		for (size_t j = 0; j < elevationMap[i].size(); ++j) {
-			int val = elevationMap[i][j];
-			inner.push_back(val);
-		}
-		elevationArray.push_back(inner);
-	}
-	result["elevationMap"] = elevationArray;
-
-	return result;
-}
-
-void TerrainGen::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("generate", "GridMap", "height", "width", "elevationMax", "seed", "openAreaMin", "noiseType", "waterRemoval", "cliffsThreshold", "noiseFreq"), &TerrainGen::generate);
 }

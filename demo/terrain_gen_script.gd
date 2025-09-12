@@ -1,5 +1,7 @@
 extends TerrainGen
 
+var simple_cube = preload("res://Prefabs/SimpleCube.tscn")
+
 enum NoiseType {
 		VALUE = 5,
 		VALUE_CUBIC = 4,
@@ -30,11 +32,15 @@ func _ready():
 
 	#var elevation_map: Array = result["elevationMap"]
 	#print("Elevation at (0,0): ", elevation_map[0][0])
-#
-	#var flat_zones: Array = result["flatZones"]
-	#for zone in flat_zones:
-		#print("Flat zone at (%d, %d) with elevation %d" % [zone["x"], zone["y"], zone["elevation"]])
-#
+
+	var flat_zones: Array = result["flatZones"]
+	
+	for zone in flat_zones:
+		var new_object = simple_cube.instantiate();
+		var spawn_position = zone 
+		new_object.global_transform.origin = Vector3(spawn_position) + Vector3(0, 0.27, 0)
+		add_child(new_object)
+#		
 	## Access Poisson samples
 	#var poisson_points: Array = result["poissonPoints"]
 	#for point in poisson_points:
