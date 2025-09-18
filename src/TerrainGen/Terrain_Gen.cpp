@@ -87,6 +87,8 @@ Dictionary TerrainGen::generate(
 	vector<vector<float>> rawNoise(widthx2, vector<float>(heightx2, 0));
 	// Data Grid -> Simply an Elevation Map double the size of our Render Grid
 	vector<vector<int>> heightMap(width * 2, vector<int>(height * 2, 0));
+	// Lock Grid -> Lock Cell's that are known to not change
+	vector<vector<bool>> lockMap(width * 2, vector<bool>(height * 2, false));
 	// Render Grid -> Real size grid with final tile type values
 	vector<vector<TileType>> tileMap(width, vector<TileType>(height, GROUND));
 	// Render Grid's Elevation Values -> Real size grid with elevation ints
@@ -123,15 +125,33 @@ Dictionary TerrainGen::generate(
 			elevationMax,
 			rawNoise,
 			heightMap,
+			lockMap,
 			lowResMap,
 			waterPoints,
 			rng);
 
 	/*****************************************************
 
-		Large Object Placement
+		Lock Borders
 
+			Outer Border's should remain untouched by later
+			code.
+
+			This ensures edges are quickly assigned, enabled
+			the ability to pass edges to parallelization, if
+			desired.
+
+	*****************************************************/
+
+	lockOuterBorder(lockMap);
+
+	/*****************************************************
+
+		Province Point Selection
+
+			Large Object Placement points.
 			Split the Map into chunks & ensure open area
+			around chosen cell.
 
 	*****************************************************/
 
@@ -140,6 +160,7 @@ Dictionary TerrainGen::generate(
 			height,
 			provinceSize,
 			heightMap,
+			lockMap,
 			widthx2,
 			heightx2,
 			flatZones,
@@ -154,6 +175,7 @@ Dictionary TerrainGen::generate(
 	*****************************************************/
 	generate_lakes(
 			heightMap,
+			lockMap,
 			waterPoints,
 			rng,
 			0, // minLakes
@@ -163,6 +185,7 @@ Dictionary TerrainGen::generate(
 
 	generate_rivers(
 			heightMap,
+			lockMap,
 			waterPoints,
 			rng,
 			0, // minRivers
@@ -192,6 +215,23 @@ Dictionary TerrainGen::generate(
 
 	/*****************************************************
 
+		Smoothing
+
+			After modifications to the base elevation
+			Height map, ensure that the elevation changes
+			are no greater than 1 int in any direction.
+
+			This ensures that the map can have meaningful
+			topology conveyed all within the height map.
+			So that tile placement can accurately determine
+			the correct tile type and rotation.
+
+	*****************************************************/
+
+	smooth_2xElevation_map(heightMap, lockMap);
+
+	/*****************************************************
+
 		Tile Placement
 
 			Using a dual grid system, determine the correct
@@ -204,6 +244,7 @@ Dictionary TerrainGen::generate(
 	//
 	//	Tiles are determined based on the dual grid system
 	//
+
 	determine_tile_types(
 			width,
 			height,
@@ -215,7 +256,7 @@ Dictionary TerrainGen::generate(
 			walkableMap,
 			cliffThreshold,
 			myGridMap);
-	//
+
 	//
 	//
 	// Phase 2 : Corrections & Rotations
@@ -335,7 +376,8 @@ void TerrainGen::generate_blocky_heightmap(
 		const int &reducedX, const int &reducedY,
 		const int &elevationMax,
 		vector<vector<float>> &rawNoise,
-		vector<vector<int>> &heightMap,
+		vector<vector<int>> &myHeightMap,
+		vector<vector<bool>> &myLockMap,
 		vector<vector<int>> &lowResMap,
 		vector<pair<int, int>> &waterPoints,
 		default_random_engine &rng) {
@@ -347,7 +389,7 @@ void TerrainGen::generate_blocky_heightmap(
 			rawNoise[x][y] = currentNoise;
 			// Normalize and scale noise to [0, elevationMax]
 			float normalizedNoise = (currentNoise + 1.0f) / 2.0f;
-			heightMap[x][y] = round(normalizedNoise * elevationMax);
+			myHeightMap[x][y] = round(normalizedNoise * elevationMax);
 		}
 	}
 
@@ -366,7 +408,7 @@ void TerrainGen::generate_blocky_heightmap(
 			int sampleX = x * elevationMax;
 			int sampleY = y * elevationMax;
 
-			lowResMap[x][y] = heightMap[sampleX][sampleY];
+			lowResMap[x][y] = myHeightMap[sampleX][sampleY];
 		}
 	}
 
@@ -392,70 +434,67 @@ void TerrainGen::generate_blocky_heightmap(
 			// Find all Water Grid Positions
 			if (elevationValue == 0) {
 				// Set all Water to Ground
-				heightMap[x][y] = 1;
+				myHeightMap[x][y] = 1;
 				waterPoints.emplace_back(x, y);
 			}
 			// If not Water, set to elevation Value
 			else {
-				heightMap[x][y] = elevationValue;
+				myHeightMap[x][y] = elevationValue;
 			}
 		}
 	}
 }
 
-void TerrainGen::flatten_and_smooth_plateau(
-		vector<vector<int>> &heightMap,
-		int width, int height,
-		int centerX, int centerY) {
-	int plateauElevation = heightMap[centerX][centerY];
+void TerrainGen::smooth_2xElevation_map(
+		vector<vector<int>> &myHeightMap,
+		const vector<vector<bool>> &lockMap) {
+	int width = static_cast<int>(myHeightMap.size());
+	int height = static_cast<int>(myHeightMap[0].size());
 
-	// Flatten a 6×6 area (36 cells) around the center
-	int halfSize = 3; // 3 cells in each direction → 6×6 total
-	for (int dx = -halfSize; dx < halfSize; ++dx) {
-		for (int dy = -halfSize; dy < halfSize; ++dy) {
-			int x = centerX + dx;
-			int y = centerY + dy;
-			if (x >= 0 && y >= 0 && x < width && y < height) {
-				heightMap[x][y] = plateauElevation;
-			}
-		}
-	}
+	bool changed;
+	do {
+		changed = false;
 
-	// Smooth the surrounding ring so no jump > 1
-	//    We'll check all cells in a 1-cell border around the plateau
-	int outerHalf = halfSize + 2;
-	for (int dx = -outerHalf; dx <= outerHalf; ++dx) {
-		for (int dy = -outerHalf; dy <= outerHalf; ++dy) {
-			int x = centerX + dx;
-			int y = centerY + dy;
-			if (x >= 0 && y >= 0 && x < width && y < height) {
-				// Skip cells inside the plateau
-				if (dx >= -halfSize && dx < halfSize &&
-						dy >= -halfSize && dy < halfSize) {
-					continue;
-				}
+		for (int x = 0; x < width; ++x) {
+			for (int y = 0; y < height; ++y) {
+				if (lockMap[x][y])
+					continue; // skip locked cells
 
-				// Compare to nearest plateau cell
-				int nearestX = clamp(x, centerX - halfSize, centerX + halfSize - 1);
-				int nearestY = clamp(y, centerY - halfSize, centerY + halfSize - 1);
-				int nearestElevation = heightMap[nearestX][nearestY];
-				int diff = heightMap[x][y] - nearestElevation;
+				int current = myHeightMap[x][y];
 
-				if (diff > 1) {
-					heightMap[x][y] = nearestElevation + 1;
-				} else if (diff < -1) {
-					heightMap[x][y] = nearestElevation - 1;
+				// Check 4-neighbors (N,S,E,W). Could extend to 8 if desired.
+				const int dirs[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+
+				for (auto &d : dirs) {
+					int nx = x + d[0];
+					int ny = y + d[1];
+					if (nx < 0 || ny < 0 || nx >= width || ny >= height)
+						continue;
+
+					int neighbor = myHeightMap[nx][ny];
+					int diff = current - neighbor;
+
+					if (diff > 1) {
+						// Too high compared to neighbor → lower it
+						myHeightMap[x][y] = neighbor + 1;
+						changed = true;
+					} else if (diff < -1) {
+						// Too low compared to neighbor → raise it
+						myHeightMap[x][y] = neighbor - 1;
+						changed = true;
+					}
 				}
 			}
 		}
-	}
+	} while (changed);
 }
 
 void TerrainGen::generate_province_points(
 		int width,
 		int height,
 		int provinceSize,
-		vector<vector<int>> &heightMap,
+		vector<vector<int>> &myHeightMap,
+		vector<vector<bool>> &myLockMap,
 		int widthx2,
 		int heightx2,
 		vector<OpenAreas> &flatZones,
@@ -465,9 +504,23 @@ void TerrainGen::generate_province_points(
 		return;
 	}
 
-	int sectorSize = static_cast<int>(floor(sqrt((width * height) / static_cast<double>(provinceSize))));
-	int sectorsAcross = width / sectorSize;
-	int sectorsDown = height / sectorSize;
+	const int borderMargin = 6;
+	int effectiveWidth = width - (borderMargin * 2); // exclude 6 on each side
+	int effectiveHeight = height - (borderMargin * 2);
+
+	if (effectiveWidth <= 0 || effectiveHeight <= 0) {
+		UtilityFunctions::print("Gaia Green ERROR | Map too small for border margin");
+		return;
+	}
+
+	int sectorSize = static_cast<int>(floor(
+			sqrt((effectiveWidth * effectiveHeight) / static_cast<double>(provinceSize))));
+
+	if (sectorSize <= 0)
+		sectorSize = 1;
+
+	int sectorsAcross = effectiveWidth / sectorSize;
+	int sectorsDown = effectiveHeight / sectorSize;
 	int totalSectors = sectorsAcross * sectorsDown;
 
 	// Create a list of all sector indices
@@ -497,13 +550,13 @@ void TerrainGen::generate_province_points(
 		int offsetX = dist(rng);
 		int offsetY = dist(rng);
 
-		int xPos = sectorStartX + offsetX;
-		int yPos = sectorStartY + offsetY;
+		int xPos = sectorStartX + offsetX + borderMargin;
+		int yPos = sectorStartY + offsetY + borderMargin;
 
 		int centerX = xPos * 2;
 		int centerY = yPos * 2;
 
-		int provinceElevation = heightMap[centerX][centerY];
+		int provinceElevation = myHeightMap[centerX][centerY];
 		if (provinceElevation == 0) {
 			provinceElevation = 1;
 		}
@@ -513,15 +566,30 @@ void TerrainGen::generate_province_points(
 		if (find(flatZones.begin(), flatZones.end(), provincePoint) == flatZones.end()) {
 			flatZones.push_back(provincePoint);
 			flatCount--;
-		}
 
-		// Smooth out any surrounding grid cell elevation values
-		flatten_and_smooth_plateau(heightMap, widthx2, heightx2, centerX, centerY);
+			myLockMap[xPos][yPos] = true; // Lock the Cell
+
+			const int flatRadiusCells = 3;
+
+			// Flatten the Area around the Random Point
+			for (int dx = -flatRadiusCells; dx <= flatRadiusCells; ++dx) {
+				for (int dy = -flatRadiusCells; dy <= flatRadiusCells; ++dy) {
+					int x = centerX + dx;
+					int y = centerY + dy;
+
+					if (x >= 0 && y >= 0 && x < width && y < height) {
+						myHeightMap[x][y] = provinceElevation;
+						myLockMap[x][y] = true; // Lock the Surrounding Cell
+					}
+				}
+			}
+		}
 	}
 }
 
 void TerrainGen::generate_lakes(
-		vector<vector<int>> &heightMap,
+		vector<vector<int>> &myHeightMap,
+		vector<vector<bool>> &myLockMap,
 		vector<pair<int, int>> &waterPoints,
 		default_random_engine &rng,
 		int minLakes = 0,
@@ -563,9 +631,11 @@ void TerrainGen::generate_lakes(
 						k <= waterPos.first - secPos + thirdPos + basePos; ++k) {
 					for (int l = waterPos.second - secPos + fourthPos;
 							l <= waterPos.second - secPos + fourthPos + basePos; ++l) {
-						if (k >= 0 && k < static_cast<int>(heightMap.size()) &&
-								l >= 0 && l < static_cast<int>(heightMap[0].size())) {
-							heightMap[k][l] = 0;
+						if (k >= 0 && k < static_cast<int>(myHeightMap.size()) &&
+								l >= 0 && l < static_cast<int>(myHeightMap[0].size())) {
+							if (!myLockMap[k][l]) {
+								myHeightMap[k][l] = 0;
+							}
 
 							// Smooth surrounding area
 							int radius = 8;
@@ -577,15 +647,16 @@ void TerrainGen::generate_lakes(
 									int neighborX = k + nk;
 									int neighborY = l + nl;
 
-									if (neighborX >= 0 && neighborX < static_cast<int>(heightMap.size()) &&
-											neighborY >= 0 && neighborY < static_cast<int>(heightMap[0].size())) {
-										int &neighborElevation = heightMap[neighborX][neighborY];
-										int diff = heightMap[k][l] - neighborElevation;
+									if (neighborX >= 0 && neighborX < static_cast<int>(myHeightMap.size()) &&
+											neighborY >= 0 && neighborY < static_cast<int>(myHeightMap[0].size())) {
+										int &neighborElevation = myHeightMap[neighborX][neighborY];
 
-										if (diff > 1) {
-											neighborElevation = heightMap[k][l] - 1;
-										} else if (diff < -1) {
-											neighborElevation = heightMap[k][l] + 1;
+										if (!myLockMap[neighborX][neighborY]) {
+											int diff = myHeightMap[k][l] - neighborElevation;
+											if (diff > 1)
+												neighborElevation = myHeightMap[k][l] - 1;
+											else if (diff < -1)
+												neighborElevation = myHeightMap[k][l] + 1;
 										}
 									}
 								}
@@ -640,7 +711,8 @@ void TerrainGen::generate_lakes(
 }
 
 void TerrainGen::generate_rivers(
-		vector<vector<int>> &heightMap,
+		vector<vector<int>> &myHeightMap,
+		vector<vector<bool>> &myLockMap,
 		vector<pair<int, int>> &waterPoints,
 		default_random_engine &rng,
 		int minRivers = 0,
@@ -685,9 +757,11 @@ void TerrainGen::generate_rivers(
 						k <= waterPos.first - secPos + thirdPos + basePos; ++k) {
 					for (int l = waterPos.second - secPos + fourthPos;
 							l <= waterPos.second - secPos + fourthPos + basePos; ++l) {
-						if (k >= 0 && k < static_cast<int>(heightMap.size()) &&
-								l >= 0 && l < static_cast<int>(heightMap[0].size())) {
-							heightMap[k][l] = 0;
+						if (k >= 0 && k < static_cast<int>(myHeightMap.size()) &&
+								l >= 0 && l < static_cast<int>(myHeightMap[0].size())) {
+							if (!myLockMap[k][l]) {
+								myHeightMap[k][l] = 0;
+							}
 
 							// Smooth surrounding area
 							int radius = 8;
@@ -699,15 +773,16 @@ void TerrainGen::generate_rivers(
 									int neighborX = k + nk;
 									int neighborY = l + nl;
 
-									if (neighborX >= 0 && neighborX < static_cast<int>(heightMap.size()) &&
-											neighborY >= 0 && neighborY < static_cast<int>(heightMap[0].size())) {
-										int &neighborElevation = heightMap[neighborX][neighborY];
-										int diff = heightMap[k][l] - neighborElevation;
+									if (neighborX >= 0 && neighborX < static_cast<int>(myHeightMap.size()) &&
+											neighborY >= 0 && neighborY < static_cast<int>(myHeightMap[0].size())) {
+										int &neighborElevation = myHeightMap[neighborX][neighborY];
 
-										if (diff > 1) {
-											neighborElevation = heightMap[k][l] - 1;
-										} else if (diff < -1) {
-											neighborElevation = heightMap[k][l] + 1;
+										if (!myLockMap[neighborX][neighborY]) {
+											int diff = myHeightMap[k][l] - neighborElevation;
+											if (diff > 1)
+												neighborElevation = myHeightMap[k][l] - 1;
+											else if (diff < -1)
+												neighborElevation = myHeightMap[k][l] + 1;
 										}
 									}
 								}
@@ -797,7 +872,7 @@ void TerrainGen::generate_rivers(
 }
 
 void TerrainGen::compute_flow_and_walkable_areas(
-		vector<vector<int>> &heightMap,
+		vector<vector<int>> &myHeightMap,
 		vector<vector<FlowCell>> &flowMap,
 		vector<vector<vector<pair<int, int>>>> &inflowMap,
 		vector<vector<int>> &flowAccumulation,
@@ -812,7 +887,7 @@ void TerrainGen::compute_flow_and_walkable_areas(
 	//
 	for (int x = 1; x < widthx2 - 1; x++) {
 		for (int y = 1; y < heightx2 - 1; y++) {
-			float currentElevation = heightMap[x][y];
+			float currentElevation = myHeightMap[x][y];
 			float lowestElevation = currentElevation;
 			int targetX = x;
 			int targetY = y;
@@ -825,7 +900,7 @@ void TerrainGen::compute_flow_and_walkable_areas(
 
 					int nx = x + dx;
 					int ny = y + dy;
-					float neighborElevation = heightMap[nx][ny];
+					float neighborElevation = myHeightMap[nx][ny];
 
 					if (neighborElevation < lowestElevation) {
 						lowestElevation = neighborElevation;
@@ -893,7 +968,7 @@ void TerrainGen::compute_flow_and_walkable_areas(
 			int perpX2 = dy;
 			int perpY2 = -dx;
 
-			int riverWidth = std::min(maxRiverWidth, static_cast<int>(flow / averageFlow));
+			int riverWidth = min(maxRiverWidth, static_cast<int>(flow / averageFlow));
 
 			for (int w = 1; w <= riverWidth; w++) {
 				int px1 = x + perpX1 * w;
@@ -914,12 +989,12 @@ void TerrainGen::compute_flow_and_walkable_areas(
 void TerrainGen::determine_tile_types(
 		int width,
 		int height,
-		const std::vector<std::vector<int>> &heightMap,
-		const std::vector<std::vector<float>> &rawNoise,
-		std::vector<std::vector<int>> &elevationMap,
-		std::vector<std::vector<int>> &elevationMapTiles,
-		std::vector<std::vector<TileType>> &tileMap,
-		const std::vector<std::vector<bool>> &walkableMap,
+		const vector<vector<int>> &myHeightMap,
+		const vector<vector<float>> &rawNoise,
+		vector<vector<int>> &elevationMap,
+		vector<vector<int>> &elevationMapTiles,
+		vector<vector<TileType>> &tileMap,
+		const vector<vector<bool>> &walkableMap,
 		float cliffThreshold,
 		GridMap *myGridMap) {
 	for (int x = 0; x < width; x++) {
@@ -932,10 +1007,10 @@ void TerrainGen::determine_tile_types(
 			// +----+----+
 			//
 			// Get the surrounding DataGrid Neighbors overlap of the Render Grid
-			int n1 = heightMap[x][y];
-			int n2 = heightMap[x + 1][y];
-			int n3 = heightMap[x][y + 1];
-			int n4 = heightMap[x + 1][y + 1];
+			int n1 = myHeightMap[x][y];
+			int n2 = myHeightMap[x + 1][y];
+			int n3 = myHeightMap[x][y + 1];
+			int n4 = myHeightMap[x + 1][y + 1];
 
 			// Determine Elevation Values
 
@@ -1271,8 +1346,8 @@ void TerrainGen::determine_tile_types(
 	}
 }
 
-void TerrainGen::print_surrounding_cells(const vector<vector<int>> &heightMap, int cx, int cy, int radius) {
-	UtilityFunctions::print("C Elevation : ", heightMap[cx][cy]);
+void TerrainGen::print_surrounding_cells(const vector<vector<int>> &myHeightMap, int cx, int cy, int radius) {
+	UtilityFunctions::print("C Elevation : ", myHeightMap[cx][cy]);
 	for (int x = cx - radius; x <= cx + radius; ++x) {
 		String row;
 		for (int y = cy - radius; y <= cy + radius; ++y) {
@@ -1280,9 +1355,9 @@ void TerrainGen::print_surrounding_cells(const vector<vector<int>> &heightMap, i
 				row += "C "; // mark center
 				continue;
 			}
-			if (y >= 0 && y < static_cast<int>(heightMap.size()) &&
-					x >= 0 && x < static_cast<int>(heightMap[0].size())) {
-				row += String::num_int64(heightMap[x][y]) + " ";
+			if (y >= 0 && y < static_cast<int>(myHeightMap.size()) &&
+					x >= 0 && x < static_cast<int>(myHeightMap[0].size())) {
+				row += String::num_int64(myHeightMap[x][y]) + " ";
 			} else {
 				row += "X "; // out-of-bounds marker
 			}
@@ -1296,7 +1371,7 @@ void TerrainGen::print_surrounding_cells(const vector<vector<int>> &heightMap, i
 void TerrainGen::apply_tile_rotations_and_fixes(
 		int width,
 		int height,
-		const std::vector<std::vector<int>> &elevationMap,
+		const vector<vector<int>> &elevationMap,
 		GridMap *myGridMap) {
 	// TODO : Water Corner's are not turning correctly
 	// TODO : Water tiles are being placed at higher elevation, may be fixed by smoothing lake/river generations
@@ -1717,10 +1792,10 @@ void TerrainGen::generate_placeable_areas_and_samples(
 		int height,
 		int widthx2,
 		int heightx2,
-		const std::vector<std::vector<bool>> &walkableMap,
-		const std::vector<std::vector<TileType>> &tileMap,
-		std::vector<std::vector<bool>> &placeableMap,
-		std::vector<Point> &poissonSamples,
+		const vector<vector<bool>> &walkableMap,
+		const vector<vector<TileType>> &tileMap,
+		vector<vector<bool>> &placeableMap,
+		vector<Point> &poissonSamples,
 		float minDistance = 3.0f) {
 	// Generate Placeable Area's
 
@@ -1762,6 +1837,28 @@ void TerrainGen::generate_placeable_areas_and_samples(
 			if (!tooClose) {
 				poissonSamples.push_back({ x, y });
 			}
+		}
+	}
+}
+
+// Lock the outer 2-cell border of the grid
+void TerrainGen::lockOuterBorder(vector<vector<bool>> &myLockMap) {
+	int maxX = static_cast<int>(myLockMap.size());
+	int maxY = static_cast<int>(myLockMap[0].size());
+
+	// Top and bottom borders (rows 0,1 and maxX-2,maxX-1)
+	for (int x = 0; x < maxX; ++x) {
+		for (int y = 0; y < 2; ++y) {
+			myLockMap[x][y] = true; // top 2 rows
+			myLockMap[x][maxY - 1 - y] = true; // bottom 2 rows
+		}
+	}
+
+	// Left and right borders (cols 0,1 and maxY-2,maxY-1)
+	for (int y = 0; y < maxY; ++y) {
+		for (int x = 0; x < 2; ++x) {
+			myLockMap[x][y] = true; // left 2 cols
+			myLockMap[maxX - 1 - x][y] = true; // right 2 cols
 		}
 	}
 }

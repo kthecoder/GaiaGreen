@@ -76,28 +76,30 @@ protected:
 			const int &reducedX, const int &reducedY,
 			const int &elevationMax,
 			vector<vector<float>> &rawNoise,
-			vector<vector<int>> &heightMap,
+			vector<vector<int>> &myHeightMap,
+			vector<vector<bool>> &myLockMap,
 			vector<vector<int>> &lowResMap,
 			vector<pair<int, int>> &waterPoints,
 			default_random_engine &rng);
 
-	void flatten_and_smooth_plateau(
-			vector<vector<int>> &heightMap,
-			int width, int height,
-			int centerX, int centerY);
+	void smooth_2xElevation_map(
+			vector<vector<int>> &myHeightMap,
+			const vector<vector<bool>> &lockMap);
 
 	void generate_province_points(
 			int width,
 			int height,
 			int provinceSize,
-			vector<vector<int>> &heightMap,
+			vector<vector<int>> &myHeightMap,
+			vector<vector<bool>> &myLockMap,
 			int widthx2,
 			int heightx2,
 			vector<OpenAreas> &flatZones,
 			default_random_engine &rng);
 
 	void generate_lakes(
-			vector<vector<int>> &heightMap,
+			vector<vector<int>> &myHeightMap,
+			vector<vector<bool>> &myLockMap,
 			vector<pair<int, int>> &waterPoints,
 			default_random_engine &rng,
 			int minLakes,
@@ -106,7 +108,8 @@ protected:
 			int maxLakeSize);
 
 	void generate_rivers(
-			vector<vector<int>> &heightMap,
+			vector<vector<int>> &myHeightMap,
+			vector<vector<bool>> &myLockMap,
 			vector<pair<int, int>> &waterPoints,
 			default_random_engine &rng,
 			int minRivers,
@@ -115,7 +118,7 @@ protected:
 			int maxRiverSize);
 
 	void compute_flow_and_walkable_areas(
-			vector<vector<int>> &heightMap,
+			vector<vector<int>> &myHeightMap,
 			vector<vector<FlowCell>> &flowMap,
 			vector<vector<vector<pair<int, int>>>> &inflowMap,
 			vector<vector<int>> &flowAccumulation,
@@ -126,19 +129,19 @@ protected:
 	void determine_tile_types(
 			int width,
 			int height,
-			const std::vector<std::vector<int>> &heightMap,
-			const std::vector<std::vector<float>> &rawNoise,
-			std::vector<std::vector<int>> &elevationMap,
-			std::vector<std::vector<int>> &elevationMapTiles,
-			std::vector<std::vector<TileType>> &tileMap,
-			const std::vector<std::vector<bool>> &walkableMap,
+			const vector<vector<int>> &myHeightMap,
+			const vector<vector<float>> &rawNoise,
+			vector<vector<int>> &elevationMap,
+			vector<vector<int>> &elevationMapTiles,
+			vector<vector<TileType>> &tileMap,
+			const vector<vector<bool>> &walkableMap,
 			float cliffThreshold,
 			GridMap *myGridMap);
 
 	void apply_tile_rotations_and_fixes(
 			int width,
 			int height,
-			const std::vector<std::vector<int>> &elevationMap,
+			const vector<vector<int>> &elevationMap,
 			GridMap *myGridMap);
 
 	void generate_placeable_areas_and_samples(
@@ -146,11 +149,13 @@ protected:
 			int height,
 			int widthx2,
 			int heightx2,
-			const std::vector<std::vector<bool>> &walkableMap,
-			const std::vector<std::vector<TileType>> &tileMap,
-			std::vector<std::vector<bool>> &placeableMap,
-			std::vector<Point> &poissonSamples,
+			const vector<vector<bool>> &walkableMap,
+			const vector<vector<TileType>> &tileMap,
+			vector<vector<bool>> &placeableMap,
+			vector<Point> &poissonSamples,
 			float minDistance);
+
+	void lockOuterBorder(vector<vector<bool>> &myLockMap);
 
 	static void _bind_methods();
 
@@ -172,7 +177,7 @@ public:
 			float cliffThreshold = 0.2,
 			float noiseFreq = 0.005);
 
-	void print_surrounding_cells(const vector<vector<int>> &heightMap, int cx, int cy, int radius);
+	void print_surrounding_cells(const vector<vector<int>> &myHeightMap, int cx, int cy, int radius);
 };
 
 #endif
